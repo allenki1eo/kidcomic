@@ -231,6 +231,7 @@ export const generateComic = createServerFn({ method: "POST" })
       customIdea?: string;
       language?: string;
       twist?: string;
+      hero?: string;
     }) => {
       if (!input?.styleHint || typeof input.styleHint !== "string") {
         throw new Error("styleHint required");
@@ -249,6 +250,9 @@ export const generateComic = createServerFn({ method: "POST" })
       if ((input.twist?.length ?? 0) > 200) {
         throw new Error("Twist too long");
       }
+      if ((input.hero?.length ?? 0) > 300) {
+        throw new Error("Hero description too long — keep it under 300 characters!");
+      }
       return input;
     },
   )
@@ -258,6 +262,7 @@ export const generateComic = createServerFn({ method: "POST" })
       customIdea: data.customIdea,
       language: data.language,
       twist: data.twist,
+      hero: data.hero,
       numPanels: 6,
     });
     const images = await Promise.all(
@@ -267,6 +272,38 @@ export const generateComic = createServerFn({ method: "POST" })
       title: story.title,
       panels: story.panels.map((p, i) => ({ ...p, imageUrl: images[i] })),
     };
+  });
+
+export const regeneratePanelImage = createServerFn({ method: "POST" })
+  .inputValidator((input: { scene: string; styleHint: string }) => {
+    if (!input?.scene || !input?.styleHint) throw new Error("scene and styleHint required");
+    if (input.scene.length > 1000) throw new Error("scene too long");
+    if (input.styleHint.length > 500) throw new Error("styleHint too long");
+    return input;
+  })
+  .handler(async ({ data }): Promise<{ imageUrl: string }> => {
+    const url = await generatePanelImage(data.scene, data.styleHint);
+    return { imageUrl: url };
+  });
+
+export const restyleComic = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { scenes: string[]; styleHint: string }) => {
+      if (!Array.isArray(input?.scenes) || input.scenes.length === 0) {
+        throw new Error("scenes required");
+      }
+      if (input.scenes.length > 20) throw new Error("too many panels");
+      if (!input.styleHint || input.styleHint.length > 500) {
+        throw new Error("styleHint required");
+      }
+      return input;
+    },
+  )
+  .handler(async ({ data }): Promise<{ imageUrls: string[] }> => {
+    const imageUrls = await Promise.all(
+      data.scenes.map((s) => generatePanelImage(s, data.styleHint)),
+    );
+    return { imageUrls };
   });
 
 export const extendComic = createServerFn({ method: "POST" })
