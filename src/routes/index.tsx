@@ -583,7 +583,11 @@ function ComicView({
   onAppend: (panels: Panel[]) => void;
 }) {
   const styleHint = currentStyle.promptHint;
+  const { user } = useAuth();
   const [downloading, setDownloading] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<"pdf" | "color" | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [savedShareId, setSavedShareId] = useState<string | null>(null);
   const [readingIdx, setReadingIdx] = useState<number | null>(null);
   const [autoPlay, setAutoPlay] = useState(false);
   const [whatsNext, setWhatsNext] = useState("");
