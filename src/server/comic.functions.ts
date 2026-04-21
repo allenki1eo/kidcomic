@@ -35,21 +35,25 @@ function buildSystemPrompt(opts: {
   isCustom: boolean;
   language: string;
   twist?: string;
+  hero?: string;
   numPanels: number;
   continuation?: boolean;
 }) {
-  const { isCustom, language, twist, numPanels, continuation } = opts;
+  const { isCustom, language, twist, hero, numPanels, continuation } = opts;
   const base = isCustom
     ? `You are a delightful children's storyteller making a fun, faith-friendly comic for kids ages 5-10. Use the kid's idea as the spark. Keep it warm, kind, age-appropriate, and full of wonder — gentle Bible/Christian values are welcome but never preachy.`
     : `You are a delightful children's Bible storyteller. Create a comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible.`;
 
   const twistLine = twist ? ` Apply this twist: ${twist}.` : "";
+  const heroLine = hero
+    ? ` Insert this kid as the main hero (or a prominent helper if the story already has a fixed protagonist like Moses): ${hero}. Use their name in captions and dialogue. In every "scene" description, describe their appearance consistently so the illustrator draws the SAME character every panel.`
+    : "";
   const langLine = ` Write the title, captions, and dialogue in ${language}.`;
   const contLine = continuation
     ? ` This is a CONTINUATION — pick up exactly where the previous story ended and continue naturally. Reuse the same characters, setting, and tone.`
     : "";
 
-  return `${base}${twistLine}${langLine}${contLine} Invent a short, playful comic title (also in ${language}). For each of ${numPanels} panels provide:
+  return `${base}${twistLine}${heroLine}${langLine}${contLine} Invent a short, playful comic title (also in ${language}). For each of ${numPanels} panels provide:
 - "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator, IN ENGLISH (illustrator only understands English). NO text/words in the image description.
 - "caption": 1-2 short sentences of kid-friendly narration in ${language}.
 - "dialogue" (optional): a single short line a character says in ${language}, with their name.
@@ -61,6 +65,7 @@ async function generateStoryPanels(args: {
   customIdea?: string;
   language?: string;
   twist?: string;
+  hero?: string;
   numPanels?: number;
   previousPanels?: Panel[];
   previousTitle?: string;
@@ -77,6 +82,7 @@ async function generateStoryPanels(args: {
     isCustom,
     language,
     twist: args.twist,
+    hero: args.hero?.trim() || undefined,
     numPanels,
     continuation,
   });
@@ -225,6 +231,7 @@ export const generateComic = createServerFn({ method: "POST" })
       customIdea?: string;
       language?: string;
       twist?: string;
+      hero?: string;
     }) => {
       if (!input?.styleHint || typeof input.styleHint !== "string") {
         throw new Error("styleHint required");
@@ -243,6 +250,9 @@ export const generateComic = createServerFn({ method: "POST" })
       if ((input.twist?.length ?? 0) > 200) {
         throw new Error("Twist too long");
       }
+      if ((input.hero?.length ?? 0) > 300) {
+        throw new Error("Hero description too long — keep it under 300 characters!");
+      }
       return input;
     },
   )
@@ -252,6 +262,7 @@ export const generateComic = createServerFn({ method: "POST" })
       customIdea: data.customIdea,
       language: data.language,
       twist: data.twist,
+      hero: data.hero,
       numPanels: 6,
     });
     const images = await Promise.all(
@@ -261,6 +272,38 @@ export const generateComic = createServerFn({ method: "POST" })
       title: story.title,
       panels: story.panels.map((p, i) => ({ ...p, imageUrl: images[i] })),
     };
+  });
+
+export const regeneratePanelImage = createServerFn({ method: "POST" })
+  .inputValidator((input: { scene: string; styleHint: string }) => {
+    if (!input?.scene || !input?.styleHint) throw new Error("scene and styleHint required");
+    if (input.scene.length > 1000) throw new Error("scene too long");
+    if (input.styleHint.length > 500) throw new Error("styleHint too long");
+    return input;
+  })
+  .handler(async ({ data }): Promise<{ imageUrl: string }> => {
+    const url = await generatePanelImage(data.scene, data.styleHint);
+    return { imageUrl: url };
+  });
+
+export const restyleComic = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { scenes: string[]; styleHint: string }) => {
+      if (!Array.isArray(input?.scenes) || input.scenes.length === 0) {
+        throw new Error("scenes required");
+      }
+      if (input.scenes.length > 20) throw new Error("too many panels");
+      if (!input.styleHint || input.styleHint.length > 500) {
+        throw new Error("styleHint required");
+      }
+      return input;
+    },
+  )
+  .handler(async ({ data }): Promise<{ imageUrls: string[] }> => {
+    const imageUrls = await Promise.all(
+      data.scenes.map((s) => generatePanelImage(s, data.styleHint)),
+    );
+    return { imageUrls };
   });
 
 export const extendComic = createServerFn({ method: "POST" })

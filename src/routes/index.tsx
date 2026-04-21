@@ -2,7 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { STORIES, ART_STYLES, type Story, type ArtStyle } from "@/lib/comic-data";
-import { generateComic, extendComic } from "@/server/comic.functions";
+import {
+  generateComic,
+  extendComic,
+  regeneratePanelImage,
+  restyleComic,
+} from "@/server/comic.functions";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -69,6 +74,7 @@ function Home() {
   const [comic, setComic] = useState<Comic | null>(null);
   const [language, setLanguage] = useState<Language>(LANGUAGES[0]);
   const [twist, setTwist] = useState("");
+  const [hero, setHero] = useState("");
 
   const canGenerate = mode === "write" ? customIdea.trim().length > 3 : !!story;
 
@@ -82,6 +88,7 @@ function Home() {
           customIdea: mode === "write" ? customIdea.trim() : undefined,
           language: language.code,
           twist: twist.trim() || undefined,
+          hero: hero.trim() || undefined,
         },
       });
     },
@@ -101,6 +108,7 @@ function Home() {
     setStory(null);
     setCustomIdea("");
     setTwist("");
+    setHero("");
     setMode("pick");
   };
 
@@ -296,6 +304,33 @@ function Home() {
               </div>
             </section>
 
+            <section className="mt-12">
+              <SectionTitle step={4} title="Star yourself in the story (optional)" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Add a kid as the hero — name + a few details about how they look.
+              </p>
+              <div className="mt-4">
+                <input
+                  value={hero}
+                  onChange={(e) => setHero(e.target.value)}
+                  maxLength={300}
+                  placeholder="e.g. a 7-year-old girl named Maya with curly brown hair and red glasses"
+                  className="w-full rounded-xl border-2 border-foreground bg-[var(--color-card)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-sun)]/40"
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{hero.length}/300</span>
+                  {hero && (
+                    <button
+                      onClick={() => setHero("")}
+                      className="font-display text-xs underline-offset-4 hover:underline"
+                    >
+                      ✕ clear hero
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+
             <section className="mt-12 flex flex-col items-center">
               <button
                 disabled={!canGenerate || mutation.isPending}
@@ -326,8 +361,10 @@ function Home() {
         {comic && (
           <ComicView
             comic={comic}
+            setComic={setComic}
             language={language}
-            styleHint={style.promptHint}
+            currentStyle={style}
+            onStyleChange={setStyle}
             onReset={reset}
             onAppend={appendPanels}
           />
@@ -509,22 +546,33 @@ function pickVoice(bcp47: string): SpeechSynthesisVoice | null {
 
 function ComicView({
   comic,
+  setComic,
   language,
-  styleHint,
+  currentStyle,
+  onStyleChange,
   onReset,
   onAppend,
 }: {
   comic: Comic;
+  setComic: React.Dispatch<React.SetStateAction<Comic | null>>;
   language: Language;
-  styleHint: string;
+  currentStyle: ArtStyle;
+  onStyleChange: (s: ArtStyle) => void;
   onReset: () => void;
   onAppend: (panels: Panel[]) => void;
 }) {
+  const styleHint = currentStyle.promptHint;
   const [downloading, setDownloading] = useState(false);
   const [readingIdx, setReadingIdx] = useState<number | null>(null);
   const [autoPlay, setAutoPlay] = useState(false);
   const [whatsNext, setWhatsNext] = useState("");
   const [showNextBox, setShowNextBox] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editSpeaker, setEditSpeaker] = useState("");
+  const [editText, setEditText] = useState("");
+  const [restyling, setRestyling] = useState(false);
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const ttsSupported =
@@ -623,6 +671,90 @@ function ComicView({
     },
   });
 
+  const openEdit = (i: number) => {
+    const d = comic.panels[i].dialogue;
+    setEditingIdx(i);
+    setEditSpeaker(d?.speaker ?? "");
+    setEditText(d?.text ?? "");
+  };
+
+  const saveEdit = async () => {
+    if (editingIdx === null) return;
+    const i = editingIdx;
+    const speaker = editSpeaker.trim();
+    const text = editText.trim();
+    const newDialogue =
+      speaker && text ? { speaker, text } : undefined;
+    setComic((c) =>
+      c
+        ? {
+            ...c,
+            panels: c.panels.map((p, idx) =>
+              idx === i ? { ...p, dialogue: newDialogue } : p,
+            ),
+          }
+        : c,
+    );
+    setEditingIdx(null);
+
+    // Re-render just that panel image so the new line fits the scene
+    try {
+      setRegeneratingIdx(i);
+      const sceneWithLine = newDialogue
+        ? `${comic.panels[i].scene}. The character ${newDialogue.speaker} is shown speaking.`
+        : comic.panels[i].scene;
+      const { imageUrl } = await regeneratePanelImage({
+        data: { scene: sceneWithLine, styleHint },
+      });
+      setComic((c) =>
+        c
+          ? {
+              ...c,
+              panels: c.panels.map((p, idx) =>
+                idx === i ? { ...p, imageUrl } : p,
+              ),
+            }
+          : c,
+      );
+      toast.success("✏️ Panel updated!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't redraw the panel.");
+    } finally {
+      setRegeneratingIdx(null);
+    }
+  };
+
+  const handleRestyle = async (newStyle: ArtStyle) => {
+    if (newStyle.id === currentStyle.id) {
+      setShowStylePicker(false);
+      return;
+    }
+    setShowStylePicker(false);
+    setRestyling(true);
+    try {
+      const { imageUrls } = await restyleComic({
+        data: {
+          scenes: comic.panels.map((p) => p.scene),
+          styleHint: newStyle.promptHint,
+        },
+      });
+      setComic((c) =>
+        c
+          ? {
+              ...c,
+              panels: c.panels.map((p, i) => ({ ...p, imageUrl: imageUrls[i] ?? p.imageUrl })),
+            }
+          : c,
+      );
+      onStyleChange(newStyle);
+      toast.success(`🎭 Restyled in ${newStyle.name}!`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't restyle the comic.");
+    } finally {
+      setRestyling(false);
+    }
+  };
+
   return (
     <section id="comic-top" className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -643,6 +775,34 @@ function ComicView({
               {readingIdx !== null && autoPlay ? "⏹️ Stop" : "🗣️ Read aloud"}
             </button>
           )}
+          <div className="relative">
+            <button
+              onClick={() => setShowStylePicker((v) => !v)}
+              disabled={restyling}
+              className="panel-card bg-[var(--color-berry)] px-5 py-2 font-display text-sm text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {restyling ? "🎨 Restyling…" : `🎭 Restyle (${currentStyle.name})`}
+            </button>
+            {showStylePicker && !restyling && (
+              <div className="panel-card absolute right-0 top-full z-20 mt-2 w-60 bg-[var(--color-card)] p-2">
+                {ART_STYLES.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleRestyle(s)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-display transition-colors hover:bg-[var(--color-muted)] ${
+                      s.id === currentStyle.id ? "opacity-50" : ""
+                    }`}
+                  >
+                    <span className="text-xl">{s.emoji}</span>
+                    <span>{s.name}</span>
+                    {s.id === currentStyle.id && (
+                      <span className="ml-auto text-xs">current</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleStrip}
             disabled={downloading}
@@ -675,6 +835,13 @@ function ComicView({
                 className="h-full w-full object-cover"
                 loading={i < 2 ? "eager" : "lazy"}
               />
+              {(regeneratingIdx === i || restyling) && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--color-background)]/70 backdrop-blur-sm">
+                  <div className="panel-card bg-[var(--color-card)] px-4 py-2 font-display text-sm">
+                    🎨 Redrawing…
+                  </div>
+                </div>
+              )}
               <span className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-foreground bg-[var(--color-sun)] font-display text-sm">
                 {i + 1}
               </span>
@@ -691,6 +858,13 @@ function ComicView({
                   </button>
                 )}
                 <button
+                  onClick={() => openEdit(i)}
+                  title="Edit dialogue"
+                  className="flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
+                >
+                  ✏️
+                </button>
+                <button
                   onClick={() =>
                     downloadImageUrl(p.imageUrl, `${slug(comic.title)}-panel-${i + 1}.png`)
                   }
@@ -700,13 +874,26 @@ function ComicView({
                   ⬇️
                 </button>
               </div>
-              {p.dialogue && (
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="speech-bubble text-sm">
+              {p.dialogue ? (
+                <button
+                  type="button"
+                  onClick={() => openEdit(i)}
+                  title="Tap to edit"
+                  className="absolute bottom-3 left-3 right-3 text-left"
+                >
+                  <div className="speech-bubble text-sm transition-transform hover:-translate-y-0.5">
                     <span className="mr-1 text-[var(--color-primary)]">{p.dialogue.speaker}:</span>
                     {p.dialogue.text}
                   </div>
-                </div>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openEdit(i)}
+                  className="absolute bottom-3 left-3 rounded-full border-2 border-dashed border-foreground/40 bg-[var(--color-card)]/80 px-3 py-1 font-display text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  💬 add a line
+                </button>
               )}
             </div>
             <div className="border-t-[3px] border-foreground bg-[var(--color-card)] p-4">
@@ -770,6 +957,66 @@ function ComicView({
           )}
         </div>
       </section>
+
+      {editingIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+          onClick={() => setEditingIdx(null)}
+        >
+          <div
+            className="panel-card w-full max-w-md bg-[var(--color-card)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-xl">💬 Edit panel {editingIdx + 1}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Change what the character says — we'll redraw this panel.
+            </p>
+            <label className="mt-4 block font-display text-sm">Speaker</label>
+            <input
+              value={editSpeaker}
+              onChange={(e) => setEditSpeaker(e.target.value)}
+              maxLength={40}
+              placeholder="e.g. Maya"
+              className="mt-1 w-full rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+            />
+            <label className="mt-3 block font-display text-sm">What they say</label>
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              maxLength={160}
+              rows={3}
+              placeholder="e.g. Don't worry, God is with us!"
+              className="mt-1 w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+            />
+            <div className="mt-2 text-right text-xs text-muted-foreground">
+              {editText.length}/160
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => {
+                  setEditSpeaker("");
+                  setEditText("");
+                }}
+                className="panel-card bg-[var(--color-muted)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+              >
+                Remove dialogue
+              </button>
+              <button
+                onClick={() => setEditingIdx(null)}
+                className="panel-card bg-[var(--color-secondary)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="panel-card bg-[var(--color-primary)] px-5 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5"
+              >
+                ✏️ Save & redraw
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
