@@ -957,6 +957,66 @@ function ComicView({
           )}
         </div>
       </section>
+
+      {editingIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+          onClick={() => setEditingIdx(null)}
+        >
+          <div
+            className="panel-card w-full max-w-md bg-[var(--color-card)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-xl">💬 Edit panel {editingIdx + 1}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Change what the character says — we'll redraw this panel.
+            </p>
+            <label className="mt-4 block font-display text-sm">Speaker</label>
+            <input
+              value={editSpeaker}
+              onChange={(e) => setEditSpeaker(e.target.value)}
+              maxLength={40}
+              placeholder="e.g. Maya"
+              className="mt-1 w-full rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+            />
+            <label className="mt-3 block font-display text-sm">What they say</label>
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              maxLength={160}
+              rows={3}
+              placeholder="e.g. Don't worry, God is with us!"
+              className="mt-1 w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+            />
+            <div className="mt-2 text-right text-xs text-muted-foreground">
+              {editText.length}/160
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => {
+                  setEditSpeaker("");
+                  setEditText("");
+                }}
+                className="panel-card bg-[var(--color-muted)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+              >
+                Remove dialogue
+              </button>
+              <button
+                onClick={() => setEditingIdx(null)}
+                className="panel-card bg-[var(--color-secondary)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="panel-card bg-[var(--color-primary)] px-5 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5"
+              >
+                ✏️ Save & redraw
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
