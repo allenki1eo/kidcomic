@@ -30,7 +30,7 @@ Return ONLY valid JSON.`;
       "X-Title": "Kids Bible Comics",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.0-flash-exp:free",
+      model: "google/gemini-2.5-flash-lite-preview-09-2025:free",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
