@@ -11,18 +11,14 @@ type ComicResult = {
   panels: Array<Panel & { imageUrl: string }>;
 };
 
-const OPENROUTER_STORY_MODELS = [
-  "google/gemma-3-27b-it:free",
-  "google/gemma-3-12b-it:free",
-  "google/gemma-4-31b-it:free",
-] as const;
+const STORY_MODEL = "google/gemini-3-flash-preview";
 
 async function generateStoryPanels(
   storyTitle: string,
   customIdea?: string,
 ): Promise<{ title: string; panels: Panel[] }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
   const isCustom = !!customIdea?.trim();
   const systemPrompt = isCustom
@@ -37,19 +33,17 @@ Return ONLY valid JSON.`
 - "dialogue" (optional): a single short line a character says, with their name.
 Return ONLY valid JSON.`;
 
-  let lastError = "Unknown OpenRouter error";
+  let lastError = "Unknown AI gateway error";
 
-  for (const model of OPENROUTER_STORY_MODELS) {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://lovable.dev",
-        "X-Title": "Kids Bible Comics",
       },
       body: JSON.stringify({
-        model,
+        model: STORY_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -59,13 +53,12 @@ Return ONLY valid JSON.`;
               : `Bible story: "${storyTitle}". Create the 6-panel comic now.`,
           },
         ],
-        response_format: { type: "json_object" },
         tools: [
           {
             type: "function",
             function: {
               name: "create_comic",
-              description: "Return a 6-panel kids Bible comic.",
+              description: "Return a 6-panel kids comic.",
               parameters: {
                 type: "object",
                 properties: {
@@ -102,10 +95,14 @@ Return ONLY valid JSON.`;
 
     if (!res.ok) {
       const t = await res.text();
-      lastError = `OpenRouter error ${res.status}: ${t.slice(0, 300)}`;
-      if (res.status === 404 || res.status === 410) {
-        continue;
+      lastError = `AI gateway error ${res.status}: ${t.slice(0, 300)}`;
+      if (res.status === 429) {
+        throw new Error("Whoa, too many comics at once! Please wait a moment and try again.");
       }
+      if (res.status === 402) {
+        throw new Error("AI credits are out — please add credits in Settings → Workspace → Usage.");
+      }
+      if (attempt === 0 && res.status >= 500) continue;
       throw new Error(lastError);
     }
 
