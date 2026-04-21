@@ -2,7 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { STORIES, ART_STYLES, type Story, type ArtStyle } from "@/lib/comic-data";
-import { generateComic, extendComic } from "@/server/comic.functions";
+import {
+  generateComic,
+  extendComic,
+  regeneratePanelImage,
+  restyleComic,
+} from "@/server/comic.functions";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -770,6 +775,34 @@ function ComicView({
               {readingIdx !== null && autoPlay ? "⏹️ Stop" : "🗣️ Read aloud"}
             </button>
           )}
+          <div className="relative">
+            <button
+              onClick={() => setShowStylePicker((v) => !v)}
+              disabled={restyling}
+              className="panel-card bg-[var(--color-berry)] px-5 py-2 font-display text-sm text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {restyling ? "🎨 Restyling…" : `🎭 Restyle (${currentStyle.name})`}
+            </button>
+            {showStylePicker && !restyling && (
+              <div className="panel-card absolute right-0 top-full z-20 mt-2 w-60 bg-[var(--color-card)] p-2">
+                {ART_STYLES.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleRestyle(s)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-display transition-colors hover:bg-[var(--color-muted)] ${
+                      s.id === currentStyle.id ? "opacity-50" : ""
+                    }`}
+                  >
+                    <span className="text-xl">{s.emoji}</span>
+                    <span>{s.name}</span>
+                    {s.id === currentStyle.id && (
+                      <span className="ml-auto text-xs">current</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleStrip}
             disabled={downloading}
