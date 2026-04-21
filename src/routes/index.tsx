@@ -835,6 +835,13 @@ function ComicView({
                 className="h-full w-full object-cover"
                 loading={i < 2 ? "eager" : "lazy"}
               />
+              {(regeneratingIdx === i || restyling) && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--color-background)]/70 backdrop-blur-sm">
+                  <div className="panel-card bg-[var(--color-card)] px-4 py-2 font-display text-sm">
+                    🎨 Redrawing…
+                  </div>
+                </div>
+              )}
               <span className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-foreground bg-[var(--color-sun)] font-display text-sm">
                 {i + 1}
               </span>
@@ -851,6 +858,13 @@ function ComicView({
                   </button>
                 )}
                 <button
+                  onClick={() => openEdit(i)}
+                  title="Edit dialogue"
+                  className="flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
+                >
+                  ✏️
+                </button>
+                <button
                   onClick={() =>
                     downloadImageUrl(p.imageUrl, `${slug(comic.title)}-panel-${i + 1}.png`)
                   }
@@ -860,13 +874,26 @@ function ComicView({
                   ⬇️
                 </button>
               </div>
-              {p.dialogue && (
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="speech-bubble text-sm">
+              {p.dialogue ? (
+                <button
+                  type="button"
+                  onClick={() => openEdit(i)}
+                  title="Tap to edit"
+                  className="absolute bottom-3 left-3 right-3 text-left"
+                >
+                  <div className="speech-bubble text-sm transition-transform hover:-translate-y-0.5">
                     <span className="mr-1 text-[var(--color-primary)]">{p.dialogue.speaker}:</span>
                     {p.dialogue.text}
                   </div>
-                </div>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openEdit(i)}
+                  className="absolute bottom-3 left-3 rounded-full border-2 border-dashed border-foreground/40 bg-[var(--color-card)]/80 px-3 py-1 font-display text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  💬 add a line
+                </button>
               )}
             </div>
             <div className="border-t-[3px] border-foreground bg-[var(--color-card)] p-4">
