@@ -17,11 +17,21 @@ const OPENROUTER_STORY_MODELS = [
   "google/gemma-4-31b-it:free",
 ] as const;
 
-async function generateStoryPanels(storyTitle: string): Promise<{ title: string; panels: Panel[] }> {
+async function generateStoryPanels(
+  storyTitle: string,
+  customIdea?: string,
+): Promise<{ title: string; panels: Panel[] }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
 
-  const systemPrompt = `You are a delightful children's Bible storyteller. Create a 6-panel comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible. For each panel provide:
+  const isCustom = !!customIdea?.trim();
+  const systemPrompt = isCustom
+    ? `You are a delightful children's storyteller making a fun, faith-friendly 6-panel comic for kids ages 5-10. Use the kid's idea as the spark. Keep it warm, kind, age-appropriate, and full of wonder — gentle Bible/Christian values are welcome but never preachy. Invent a short, playful comic title. For each panel provide:
+- "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator. NO text/words in the image description.
+- "caption": 1-2 short sentences of kid-friendly narration.
+- "dialogue" (optional): a single short line a character says, with their name.
+Return ONLY valid JSON.`
+    : `You are a delightful children's Bible storyteller. Create a 6-panel comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible. For each panel provide:
 - "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator. NO text/words in the image description.
 - "caption": 1-2 short sentences of kid-friendly narration.
 - "dialogue" (optional): a single short line a character says, with their name.
