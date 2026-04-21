@@ -27,16 +27,33 @@ export const Route = createFileRoute("/")({
 
 type Comic = Awaited<ReturnType<typeof generateComic>>;
 
+const FUN_IDEAS = [
+  "A friendly dragon learns to share at Sunday school",
+  "Astronaut kids pray on the moon",
+  "A talking lamb leads a parade through Bethlehem",
+  "Two best friends build the world's tallest sandcastle for God",
+  "A kind robot helps Noah feed all the animals",
+];
+
 function Home() {
   const [story, setStory] = useState<Story | null>(null);
   const [style, setStyle] = useState<ArtStyle>(ART_STYLES[0]);
+  const [customIdea, setCustomIdea] = useState("");
+  const [mode, setMode] = useState<"pick" | "write">("pick");
   const [comic, setComic] = useState<Comic | null>(null);
+
+  const canGenerate =
+    mode === "write" ? customIdea.trim().length > 3 : !!story;
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!story) throw new Error("Pick a story first!");
+      if (!canGenerate) throw new Error("Pick a story or write your own idea!");
       return generateComic({
-        data: { storyTitle: story.title, styleHint: style.promptHint },
+        data: {
+          storyTitle: mode === "pick" && story ? story.title : "Custom Adventure",
+          styleHint: style.promptHint,
+          customIdea: mode === "write" ? customIdea.trim() : undefined,
+        },
       });
     },
     onSuccess: (data) => {
@@ -53,6 +70,14 @@ function Home() {
   const reset = () => {
     setComic(null);
     setStory(null);
+    setCustomIdea("");
+    setMode("pick");
+  };
+
+  const surpriseMe = () => {
+    const idea = FUN_IDEAS[Math.floor(Math.random() * FUN_IDEAS.length)];
+    setCustomIdea(idea);
+    setMode("write");
   };
 
   return (
@@ -64,26 +89,90 @@ function Home() {
         {!comic && (
           <>
             <section className="mt-10">
-              <SectionTitle step={1} title="Pick a Bible story" />
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {STORIES.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setStory(s)}
-                    className={`panel-card group flex flex-col items-center gap-2 p-4 text-center transition-transform hover:-translate-y-1 ${
-                      story?.id === s.id
-                        ? "ring-4 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)]"
-                        : ""
-                    }`}
-                  >
-                    <span className="text-4xl transition-transform group-hover:scale-110">
-                      {s.emoji}
-                    </span>
-                    <span className="font-display text-base leading-tight">{s.title}</span>
-                    <span className="text-xs text-muted-foreground">{s.blurb}</span>
-                  </button>
-                ))}
+              <SectionTitle step={1} title="Choose your adventure" />
+
+              <div className="mt-5 inline-flex rounded-full border-2 border-foreground bg-[var(--color-card)] p-1 font-display text-sm">
+                <button
+                  onClick={() => setMode("pick")}
+                  className={`rounded-full px-4 py-2 transition-colors ${
+                    mode === "pick"
+                      ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
+                      : "text-foreground/70 hover:text-foreground"
+                  }`}
+                >
+                  📖 Pick a Bible story
+                </button>
+                <button
+                  onClick={() => setMode("write")}
+                  className={`rounded-full px-4 py-2 transition-colors ${
+                    mode === "write"
+                      ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
+                      : "text-foreground/70 hover:text-foreground"
+                  }`}
+                >
+                  ✍️ Write my own
+                </button>
               </div>
+
+              {mode === "pick" ? (
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  {STORIES.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setStory(s)}
+                      className={`panel-card group flex flex-col items-center gap-2 p-4 text-center transition-transform hover:-translate-y-1 ${
+                        story?.id === s.id
+                          ? "ring-4 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)]"
+                          : ""
+                      }`}
+                    >
+                      <span className="text-4xl transition-transform group-hover:scale-110">
+                        {s.emoji}
+                      </span>
+                      <span className="font-display text-base leading-tight">{s.title}</span>
+                      <span className="text-xs text-muted-foreground">{s.blurb}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <div className="panel-card p-4">
+                    <label className="font-display text-sm" htmlFor="ideaBox">
+                      What should the comic be about? ✨
+                    </label>
+                    <textarea
+                      id="ideaBox"
+                      value={customIdea}
+                      onChange={(e) => setCustomIdea(e.target.value)}
+                      maxLength={500}
+                      rows={3}
+                      placeholder="e.g. A brave little lamb who helps a lost shepherd find his way home…"
+                      className="mt-2 w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+                    />
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span>{customIdea.length}/500</span>
+                      <button
+                        onClick={surpriseMe}
+                        className="font-display text-sm text-[var(--color-primary)] underline-offset-4 hover:underline"
+                      >
+                        🎲 Surprise me!
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {FUN_IDEAS.map((idea) => (
+                      <button
+                        key={idea}
+                        onClick={() => setCustomIdea(idea)}
+                        className="rounded-full border-2 border-foreground bg-[var(--color-accent)] px-3 py-1 text-xs font-semibold transition-transform hover:-translate-y-0.5"
+                      >
+                        {idea}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="mt-12">
@@ -109,22 +198,25 @@ function Home() {
 
             <section className="mt-12 flex flex-col items-center">
               <button
-                disabled={!story || mutation.isPending}
+                disabled={!canGenerate || mutation.isPending}
                 onClick={() => mutation.mutate()}
-                className="panel-card group inline-flex items-center gap-3 bg-[var(--color-primary)] px-8 py-5 font-display text-xl text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                className="panel-card group inline-flex items-center gap-3 px-8 py-5 font-display text-xl text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                 style={{ background: "var(--gradient-sunset)" }}
               >
                 <span className="text-2xl">{mutation.isPending ? "✨" : "📖"}</span>
                 {mutation.isPending
                   ? "Drawing your comic…"
-                  : story
-                    ? `Make my "${story.title}" comic!`
-                    : "Pick a story above"}
+                  : mode === "write"
+                    ? canGenerate
+                      ? "Make MY comic!"
+                      : "Write your idea above"
+                    : story
+                      ? `Make my "${story.title}" comic!`
+                      : "Pick a story above"}
               </button>
               {mutation.isPending && (
                 <p className="mt-4 text-center text-sm text-muted-foreground">
-                  Writing the story and painting 6 panels — this takes about 30–60 seconds. Worth
-                  the wait! 🎨
+                  Writing the story and painting 6 panels — about 30–60 seconds. Worth the wait! 🎨
                 </p>
               )}
             </section>
