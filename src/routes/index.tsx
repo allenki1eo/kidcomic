@@ -541,22 +541,33 @@ function pickVoice(bcp47: string): SpeechSynthesisVoice | null {
 
 function ComicView({
   comic,
+  setComic,
   language,
-  styleHint,
+  currentStyle,
+  onStyleChange,
   onReset,
   onAppend,
 }: {
   comic: Comic;
+  setComic: React.Dispatch<React.SetStateAction<Comic | null>>;
   language: Language;
-  styleHint: string;
+  currentStyle: ArtStyle;
+  onStyleChange: (s: ArtStyle) => void;
   onReset: () => void;
   onAppend: (panels: Panel[]) => void;
 }) {
+  const styleHint = currentStyle.promptHint;
   const [downloading, setDownloading] = useState(false);
   const [readingIdx, setReadingIdx] = useState<number | null>(null);
   const [autoPlay, setAutoPlay] = useState(false);
   const [whatsNext, setWhatsNext] = useState("");
   const [showNextBox, setShowNextBox] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editSpeaker, setEditSpeaker] = useState("");
+  const [editText, setEditText] = useState("");
+  const [restyling, setRestyling] = useState(false);
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const ttsSupported =
