@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      comics: {
+        Row: {
+          created_at: string
+          id: string
+          is_public: boolean
+          language: string
+          panels: Json
+          share_id: string
+          style_id: string | null
+          style_name: string | null
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          language?: string
+          panels: Json
+          share_id?: string
+          style_id?: string | null
+          style_name?: string | null
+          title: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          language?: string
+          panels?: Json
+          share_id?: string
+          style_id?: string | null
+          style_name?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
