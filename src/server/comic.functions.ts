@@ -11,6 +11,12 @@ type ComicResult = {
   panels: Array<Panel & { imageUrl: string }>;
 };
 
+const OPENROUTER_STORY_MODELS = [
+  "google/gemma-3-27b-it:free",
+  "google/gemma-3-12b-it:free",
+  "google/gemma-4-31b-it:free",
+] as const;
+
 async function generateStoryPanels(storyTitle: string): Promise<{ title: string; panels: Panel[] }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
@@ -21,83 +27,94 @@ async function generateStoryPanels(storyTitle: string): Promise<{ title: string;
 - "dialogue" (optional): a single short line a character says, with their name.
 Return ONLY valid JSON.`;
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://lovable.dev",
-      "X-Title": "Kids Bible Comics",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-lite-preview-09-2025:free",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
-      ],
-      response_format: { type: "json_object" },
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "create_comic",
-            description: "Return a 6-panel kids Bible comic.",
-            parameters: {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                panels: {
-                  type: "array",
-                  minItems: 6,
-                  maxItems: 6,
-                  items: {
-                    type: "object",
-                    properties: {
-                      scene: { type: "string" },
-                      caption: { type: "string" },
-                      dialogue: {
-                        type: "object",
-                        properties: {
-                          speaker: { type: "string" },
-                          text: { type: "string" },
+  let lastError = "Unknown OpenRouter error";
+
+  for (const model of OPENROUTER_STORY_MODELS) {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://lovable.dev",
+        "X-Title": "Kids Bible Comics",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
+        ],
+        response_format: { type: "json_object" },
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "create_comic",
+              description: "Return a 6-panel kids Bible comic.",
+              parameters: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  panels: {
+                    type: "array",
+                    minItems: 6,
+                    maxItems: 6,
+                    items: {
+                      type: "object",
+                      properties: {
+                        scene: { type: "string" },
+                        caption: { type: "string" },
+                        dialogue: {
+                          type: "object",
+                          properties: {
+                            speaker: { type: "string" },
+                            text: { type: "string" },
+                          },
                         },
                       },
+                      required: ["scene", "caption"],
                     },
-                    required: ["scene", "caption"],
                   },
                 },
+                required: ["title", "panels"],
               },
-              required: ["title", "panels"],
             },
           },
-        },
-      ],
-      tool_choice: { type: "function", function: { name: "create_comic" } },
-    }),
-  });
+        ],
+        tool_choice: { type: "function", function: { name: "create_comic" } },
+      }),
+    });
 
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenRouter error ${res.status}: ${t.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  let parsed: { title: string; panels: Panel[] } | null = null;
-  if (toolCall?.function?.arguments) {
-    try {
-      parsed = JSON.parse(toolCall.function.arguments);
-    } catch {}
-  }
-  if (!parsed) {
-    const content = data.choices?.[0]?.message?.content;
-    if (content) {
+    if (!res.ok) {
+      const t = await res.text();
+      lastError = `OpenRouter error ${res.status}: ${t.slice(0, 300)}`;
+      if (res.status === 404 || res.status === 410) {
+        continue;
+      }
+      throw new Error(lastError);
+    }
+
+    const data = await res.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    let parsed: { title: string; panels: Panel[] } | null = null;
+    if (toolCall?.function?.arguments) {
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(toolCall.function.arguments);
       } catch {}
     }
+    if (!parsed) {
+      const content = data.choices?.[0]?.message?.content;
+      if (content) {
+        try {
+          parsed = JSON.parse(content);
+        } catch {}
+      }
+    }
+    if (!parsed?.panels?.length) throw new Error("Story generation returned no panels");
+    return parsed;
   }
-  if (!parsed?.panels?.length) throw new Error("Story generation returned no panels");
-  return parsed;
+
+  throw new Error(lastError);
 }
 
 async function generatePanelImage(scene: string, styleHint: string): Promise<string> {
