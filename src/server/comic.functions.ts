@@ -52,7 +52,12 @@ Return ONLY valid JSON.`;
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
+          {
+            role: "user",
+            content: isCustom
+              ? `Kid's story idea: "${customIdea!.trim()}". Turn it into a fun, kind 6-panel comic now.`
+              : `Bible story: "${storyTitle}". Create the 6-panel comic now.`,
+          },
         ],
         response_format: { type: "json_object" },
         tools: [
@@ -157,20 +162,27 @@ async function generatePanelImage(scene: string, styleHint: string): Promise<str
 }
 
 export const generateComic = createServerFn({ method: "POST" })
-  .inputValidator((input: { storyTitle: string; styleHint: string }) => {
-    if (!input?.storyTitle || typeof input.storyTitle !== "string") {
-      throw new Error("storyTitle required");
-    }
-    if (!input?.styleHint || typeof input.styleHint !== "string") {
-      throw new Error("styleHint required");
-    }
-    if (input.storyTitle.length > 200 || input.styleHint.length > 500) {
-      throw new Error("input too long");
-    }
-    return input;
-  })
+  .inputValidator(
+    (input: { storyTitle: string; styleHint: string; customIdea?: string }) => {
+      if (!input?.styleHint || typeof input.styleHint !== "string") {
+        throw new Error("styleHint required");
+      }
+      const hasCustom = typeof input.customIdea === "string" && input.customIdea.trim().length > 0;
+      const hasTitle = typeof input.storyTitle === "string" && input.storyTitle.trim().length > 0;
+      if (!hasCustom && !hasTitle) {
+        throw new Error("Pick a story or write your own idea!");
+      }
+      if ((input.storyTitle?.length ?? 0) > 200 || input.styleHint.length > 500) {
+        throw new Error("input too long");
+      }
+      if ((input.customIdea?.length ?? 0) > 500) {
+        throw new Error("Your story idea is too long — keep it under 500 characters!");
+      }
+      return input;
+    },
+  )
   .handler(async ({ data }): Promise<ComicResult> => {
-    const story = await generateStoryPanels(data.storyTitle);
+    const story = await generateStoryPanels(data.storyTitle, data.customIdea);
     const images = await Promise.all(
       story.panels.map((p) => generatePanelImage(p.scene, data.styleHint)),
     );
