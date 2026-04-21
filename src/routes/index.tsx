@@ -263,17 +263,134 @@ function SectionTitle({ step, title }: { step: number; title: string }) {
   );
 }
 
+async function downloadDataUrl(dataUrl: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function downloadImageUrl(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    await downloadDataUrl(objUrl, filename);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+  } catch {
+    await downloadDataUrl(url, filename);
+  }
+}
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function slug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "comic";
+}
+
+async function downloadStrip(comic: Comic) {
+  const cols = 3;
+  const rows = Math.ceil(comic.panels.length / cols);
+  const tile = 600;
+  const cap = 110;
+  const gap = 16;
+  const pad = 24;
+  const titleH = 80;
+  const W = pad * 2 + cols * tile + (cols - 1) * gap;
+  const H = pad * 2 + titleH + rows * (tile + cap) + (rows - 1) * gap;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff8ec";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.font = "bold 44px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(comic.title, W / 2, pad + 50);
+
+  const imgs = await Promise.all(comic.panels.map((p) => loadImg(p.imageUrl).catch(() => null)));
+
+  for (let i = 0; i < comic.panels.length; i++) {
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    const x = pad + c * (tile + gap);
+    const y = pad + titleH + r * (tile + cap + gap);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x, y, tile, tile + cap);
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x, y, tile, tile + cap);
+    const img = imgs[i];
+    if (img) ctx.drawImage(img, x, y, tile, tile);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = "600 22px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    const caption = comic.panels[i].caption;
+    const words = caption.split(" ");
+    let line = "";
+    let yy = y + tile + 32;
+    const maxW = tile - 24;
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW) {
+        ctx.fillText(line, x + 12, yy);
+        line = w;
+        yy += 26;
+        if (yy > y + tile + cap - 8) break;
+      } else line = test;
+    }
+    if (line) ctx.fillText(line, x + 12, yy);
+  }
+
+  const dataUrl = canvas.toDataURL("image/png");
+  await downloadDataUrl(dataUrl, `${slug(comic.title)}-comic.png`);
+}
+
 function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleStrip = async () => {
+    setDownloading(true);
+    try {
+      await downloadStrip(comic);
+    } catch {
+      toast.error("Couldn't build the comic strip. Try downloading single panels instead.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <section id="comic-top" className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-3xl sm:text-4xl">{comic.title}</h2>
-        <button
-          onClick={onReset}
-          className="panel-card bg-[var(--color-secondary)] px-5 py-2 font-display text-sm text-[var(--color-secondary-foreground)] transition-transform hover:-translate-y-0.5"
-        >
-          ← Make another
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleStrip}
+            disabled={downloading}
+            className="panel-card bg-[var(--color-primary)] px-5 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            {downloading ? "📦 Packing…" : "⬇️ Download comic"}
+          </button>
+          <button
+            onClick={onReset}
+            className="panel-card bg-[var(--color-secondary)] px-5 py-2 font-display text-sm text-[var(--color-secondary-foreground)] transition-transform hover:-translate-y-0.5"
+          >
+            ← Make another
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -289,6 +406,13 @@ function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
               <span className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-foreground bg-[var(--color-sun)] font-display text-sm">
                 {i + 1}
               </span>
+              <button
+                onClick={() => downloadImageUrl(p.imageUrl, `${slug(comic.title)}-panel-${i + 1}.png`)}
+                title="Download this panel"
+                className="absolute right-3 top-3 flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
+              >
+                ⬇️
+              </button>
               {p.dialogue && (
                 <div className="absolute bottom-3 left-3 right-3">
                   <div className="speech-bubble text-sm">
