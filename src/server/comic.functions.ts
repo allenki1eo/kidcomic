@@ -17,11 +17,21 @@ const OPENROUTER_STORY_MODELS = [
   "google/gemma-4-31b-it:free",
 ] as const;
 
-async function generateStoryPanels(storyTitle: string): Promise<{ title: string; panels: Panel[] }> {
+async function generateStoryPanels(
+  storyTitle: string,
+  customIdea?: string,
+): Promise<{ title: string; panels: Panel[] }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
 
-  const systemPrompt = `You are a delightful children's Bible storyteller. Create a 6-panel comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible. For each panel provide:
+  const isCustom = !!customIdea?.trim();
+  const systemPrompt = isCustom
+    ? `You are a delightful children's storyteller making a fun, faith-friendly 6-panel comic for kids ages 5-10. Use the kid's idea as the spark. Keep it warm, kind, age-appropriate, and full of wonder — gentle Bible/Christian values are welcome but never preachy. Invent a short, playful comic title. For each panel provide:
+- "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator. NO text/words in the image description.
+- "caption": 1-2 short sentences of kid-friendly narration.
+- "dialogue" (optional): a single short line a character says, with their name.
+Return ONLY valid JSON.`
+    : `You are a delightful children's Bible storyteller. Create a 6-panel comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible. For each panel provide:
 - "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator. NO text/words in the image description.
 - "caption": 1-2 short sentences of kid-friendly narration.
 - "dialogue" (optional): a single short line a character says, with their name.
@@ -42,7 +52,12 @@ Return ONLY valid JSON.`;
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
+          {
+            role: "user",
+            content: isCustom
+              ? `Kid's story idea: "${customIdea!.trim()}". Turn it into a fun, kind 6-panel comic now.`
+              : `Bible story: "${storyTitle}". Create the 6-panel comic now.`,
+          },
         ],
         response_format: { type: "json_object" },
         tools: [
@@ -147,20 +162,27 @@ async function generatePanelImage(scene: string, styleHint: string): Promise<str
 }
 
 export const generateComic = createServerFn({ method: "POST" })
-  .inputValidator((input: { storyTitle: string; styleHint: string }) => {
-    if (!input?.storyTitle || typeof input.storyTitle !== "string") {
-      throw new Error("storyTitle required");
-    }
-    if (!input?.styleHint || typeof input.styleHint !== "string") {
-      throw new Error("styleHint required");
-    }
-    if (input.storyTitle.length > 200 || input.styleHint.length > 500) {
-      throw new Error("input too long");
-    }
-    return input;
-  })
+  .inputValidator(
+    (input: { storyTitle: string; styleHint: string; customIdea?: string }) => {
+      if (!input?.styleHint || typeof input.styleHint !== "string") {
+        throw new Error("styleHint required");
+      }
+      const hasCustom = typeof input.customIdea === "string" && input.customIdea.trim().length > 0;
+      const hasTitle = typeof input.storyTitle === "string" && input.storyTitle.trim().length > 0;
+      if (!hasCustom && !hasTitle) {
+        throw new Error("Pick a story or write your own idea!");
+      }
+      if ((input.storyTitle?.length ?? 0) > 200 || input.styleHint.length > 500) {
+        throw new Error("input too long");
+      }
+      if ((input.customIdea?.length ?? 0) > 500) {
+        throw new Error("Your story idea is too long — keep it under 500 characters!");
+      }
+      return input;
+    },
+  )
   .handler(async ({ data }): Promise<ComicResult> => {
-    const story = await generateStoryPanels(data.storyTitle);
+    const story = await generateStoryPanels(data.storyTitle, data.customIdea);
     const images = await Promise.all(
       story.panels.map((p) => generatePanelImage(p.scene, data.styleHint)),
     );
