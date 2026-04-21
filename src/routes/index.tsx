@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { STORIES, ART_STYLES, type Story, type ArtStyle } from "@/lib/comic-data";
-import { generateComic } from "@/server/comic.functions";
+import { generateComic, extendComic } from "@/server/comic.functions";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -26,6 +26,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Comic = Awaited<ReturnType<typeof generateComic>>;
+type Panel = Comic["panels"][number];
 
 const FUN_IDEAS = [
   "A friendly dragon learns to share at Sunday school",
@@ -35,15 +36,41 @@ const FUN_IDEAS = [
   "A kind robot helps Noah feed all the animals",
 ];
 
+const TWISTS = [
+  "told from the donkey's point of view",
+  "but everyone is a tiny mouse",
+  "set in outer space",
+  "as a musical with songs",
+  "where the hero is a brave little kid",
+  "but it rains glitter the whole time",
+  "told backwards, ending first",
+  "where animals can talk",
+];
+
+type Language = { code: string; label: string; flag: string; bcp47: string };
+const LANGUAGES: Language[] = [
+  { code: "en", label: "English", flag: "🇬🇧", bcp47: "en-US" },
+  { code: "es", label: "Español", flag: "🇪🇸", bcp47: "es-ES" },
+  { code: "fr", label: "Français", flag: "🇫🇷", bcp47: "fr-FR" },
+  { code: "de", label: "Deutsch", flag: "🇩🇪", bcp47: "de-DE" },
+  { code: "pt", label: "Português", flag: "🇵🇹", bcp47: "pt-PT" },
+  { code: "it", label: "Italiano", flag: "🇮🇹", bcp47: "it-IT" },
+  { code: "sw", label: "Kiswahili", flag: "🇰🇪", bcp47: "sw-KE" },
+  { code: "zh", label: "中文", flag: "🇨🇳", bcp47: "zh-CN" },
+  { code: "ar", label: "العربية", flag: "🇸🇦", bcp47: "ar-SA" },
+  { code: "hi", label: "हिन्दी", flag: "🇮🇳", bcp47: "hi-IN" },
+];
+
 function Home() {
   const [story, setStory] = useState<Story | null>(null);
   const [style, setStyle] = useState<ArtStyle>(ART_STYLES[0]);
   const [customIdea, setCustomIdea] = useState("");
   const [mode, setMode] = useState<"pick" | "write">("pick");
   const [comic, setComic] = useState<Comic | null>(null);
+  const [language, setLanguage] = useState<Language>(LANGUAGES[0]);
+  const [twist, setTwist] = useState("");
 
-  const canGenerate =
-    mode === "write" ? customIdea.trim().length > 3 : !!story;
+  const canGenerate = mode === "write" ? customIdea.trim().length > 3 : !!story;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -53,6 +80,8 @@ function Home() {
           storyTitle: mode === "pick" && story ? story.title : "Custom Adventure",
           styleHint: style.promptHint,
           customIdea: mode === "write" ? customIdea.trim() : undefined,
+          language: language.code,
+          twist: twist.trim() || undefined,
         },
       });
     },
@@ -71,13 +100,38 @@ function Home() {
     setComic(null);
     setStory(null);
     setCustomIdea("");
+    setTwist("");
     setMode("pick");
   };
 
-  const surpriseMe = () => {
+  const surpriseMeIdea = () => {
     const idea = FUN_IDEAS[Math.floor(Math.random() * FUN_IDEAS.length)];
     setCustomIdea(idea);
     setMode("write");
+  };
+
+  const fullRemix = () => {
+    const pickStory = Math.random() < 0.6;
+    if (pickStory) {
+      setMode("pick");
+      setStory(STORIES[Math.floor(Math.random() * STORIES.length)]);
+    } else {
+      setMode("write");
+      setCustomIdea(FUN_IDEAS[Math.floor(Math.random() * FUN_IDEAS.length)]);
+    }
+    setStyle(ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)]);
+    setTwist(TWISTS[Math.floor(Math.random() * TWISTS.length)]);
+    toast.success("🎲 Remixed! Hit the big button to draw it.");
+  };
+
+  const appendPanels = (newPanels: Panel[]) => {
+    setComic((c) => (c ? { ...c, panels: [...c.panels, ...newPanels] } : c));
+    setTimeout(() => {
+      document.getElementById(`panel-${(comic?.panels.length ?? 0)}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 100);
   };
 
   return (
@@ -88,7 +142,17 @@ function Home() {
 
         {!comic && (
           <>
-            <section className="mt-10">
+            <section className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={fullRemix}
+                className="panel-card inline-flex items-center gap-2 bg-[var(--color-berry)] px-5 py-3 font-display text-base text-white transition-transform hover:-translate-y-1"
+              >
+                🎲 Surprise me — full remix!
+              </button>
+              <LanguagePicker value={language} onChange={setLanguage} />
+            </section>
+
+            <section className="mt-8">
               <SectionTitle step={1} title="Choose your adventure" />
 
               <div className="mt-5 inline-flex rounded-full border-2 border-foreground bg-[var(--color-card)] p-1 font-display text-sm">
@@ -152,7 +216,7 @@ function Home() {
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>{customIdea.length}/500</span>
                       <button
-                        onClick={surpriseMe}
+                        onClick={surpriseMeIdea}
                         className="font-display text-sm text-[var(--color-primary)] underline-offset-4 hover:underline"
                       >
                         🎲 Surprise me!
@@ -196,6 +260,42 @@ function Home() {
               </div>
             </section>
 
+            <section className="mt-12">
+              <SectionTitle step={3} title="Add a fun twist (optional)" />
+              <div className="mt-5">
+                <input
+                  value={twist}
+                  onChange={(e) => setTwist(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. told from the donkey's POV, set in space, as a musical…"
+                  className="w-full rounded-xl border-2 border-foreground bg-[var(--color-card)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-berry)]/40"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {TWISTS.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTwist(t)}
+                      className={`rounded-full border-2 border-foreground px-3 py-1 text-xs font-semibold transition-transform hover:-translate-y-0.5 ${
+                        twist === t
+                          ? "bg-[var(--color-berry)] text-white"
+                          : "bg-[var(--color-card)]"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                  {twist && (
+                    <button
+                      onClick={() => setTwist("")}
+                      className="rounded-full border-2 border-foreground bg-[var(--color-muted)] px-3 py-1 text-xs font-semibold"
+                    >
+                      ✕ clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+
             <section className="mt-12 flex flex-col items-center">
               <button
                 disabled={!canGenerate || mutation.isPending}
@@ -223,13 +323,49 @@ function Home() {
           </>
         )}
 
-        {comic && <ComicView comic={comic} onReset={reset} />}
+        {comic && (
+          <ComicView
+            comic={comic}
+            language={language}
+            styleHint={style.promptHint}
+            onReset={reset}
+            onAppend={appendPanels}
+          />
+        )}
 
         <footer className="mt-16 text-center text-xs text-muted-foreground">
           Stories generated with AI. Always read the real Bible too! ✨
         </footer>
       </div>
     </main>
+  );
+}
+
+function LanguagePicker({
+  value,
+  onChange,
+}: {
+  value: Language;
+  onChange: (l: Language) => void;
+}) {
+  return (
+    <label className="panel-card flex items-center gap-2 px-3 py-2 font-display text-sm">
+      🌍
+      <select
+        value={value.code}
+        onChange={(e) => {
+          const next = LANGUAGES.find((l) => l.code === e.target.value);
+          if (next) onChange(next);
+        }}
+        className="bg-transparent font-display text-sm outline-none"
+      >
+        {LANGUAGES.map((l) => (
+          <option key={l.code} value={l.code}>
+            {l.flag} {l.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -358,8 +494,96 @@ async function downloadStrip(comic: Comic) {
   await downloadDataUrl(dataUrl, `${slug(comic.title)}-comic.png`);
 }
 
-function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
+function pickVoice(bcp47: string): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  const lang = bcp47.toLowerCase();
+  const langPrefix = lang.split("-")[0];
+  return (
+    voices.find((v) => v.lang.toLowerCase() === lang) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix)) ||
+    null
+  );
+}
+
+function ComicView({
+  comic,
+  language,
+  styleHint,
+  onReset,
+  onAppend,
+}: {
+  comic: Comic;
+  language: Language;
+  styleHint: string;
+  onReset: () => void;
+  onAppend: (panels: Panel[]) => void;
+}) {
   const [downloading, setDownloading] = useState(false);
+  const [readingIdx, setReadingIdx] = useState<number | null>(null);
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [whatsNext, setWhatsNext] = useState("");
+  const [showNextBox, setShowNextBox] = useState(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const ttsSupported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
+
+  // Warm up voices list (some browsers load async)
+  useEffect(() => {
+    if (!ttsSupported) return;
+    window.speechSynthesis.getVoices();
+    const handler = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener?.("voiceschanged", handler);
+    return () => {
+      window.speechSynthesis.removeEventListener?.("voiceschanged", handler);
+      window.speechSynthesis.cancel();
+    };
+  }, [ttsSupported]);
+
+  const stopReading = () => {
+    if (!ttsSupported) return;
+    window.speechSynthesis.cancel();
+    setReadingIdx(null);
+    setAutoPlay(false);
+  };
+
+  const speakPanel = (idx: number, autoNext = false) => {
+    if (!ttsSupported) {
+      toast.error("Read-aloud isn't supported in this browser.");
+      return;
+    }
+    const panel = comic.panels[idx];
+    if (!panel) return;
+    window.speechSynthesis.cancel();
+    const text = panel.dialogue
+      ? `${panel.caption}. ${panel.dialogue.speaker} says: ${panel.dialogue.text}`
+      : panel.caption;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = language.bcp47;
+    const voice = pickVoice(language.bcp47);
+    if (voice) u.voice = voice;
+    u.rate = 0.95;
+    u.pitch = 1.05;
+    u.onend = () => {
+      if (autoNext && idx + 1 < comic.panels.length) {
+        setReadingIdx(idx + 1);
+        setTimeout(() => speakPanel(idx + 1, true), 350);
+      } else {
+        setReadingIdx(null);
+        setAutoPlay(false);
+      }
+    };
+    u.onerror = () => {
+      setReadingIdx(null);
+      setAutoPlay(false);
+    };
+    utteranceRef.current = u;
+    setReadingIdx(idx);
+    document.getElementById(`panel-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.speechSynthesis.speak(u);
+  };
 
   const handleStrip = async () => {
     setDownloading(true);
@@ -372,11 +596,53 @@ function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
     }
   };
 
+  const extendMutation = useMutation({
+    mutationFn: async () => {
+      return extendComic({
+        data: {
+          previousTitle: comic.title,
+          previousPanels: comic.panels.map((p) => ({
+            scene: p.scene,
+            caption: p.caption,
+            dialogue: p.dialogue,
+          })),
+          whatHappensNext: whatsNext.trim(),
+          styleHint,
+          language: language.code,
+        },
+      });
+    },
+    onSuccess: (data) => {
+      onAppend(data.panels);
+      setWhatsNext("");
+      setShowNextBox(false);
+      toast.success("✨ 3 new panels added!");
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Couldn't continue the story.");
+    },
+  });
+
   return (
     <section id="comic-top" className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-3xl sm:text-4xl">{comic.title}</h2>
         <div className="flex flex-wrap gap-2">
+          {ttsSupported && (
+            <button
+              onClick={() => {
+                if (readingIdx !== null) {
+                  stopReading();
+                } else {
+                  setAutoPlay(true);
+                  speakPanel(0, true);
+                }
+              }}
+              className="panel-card bg-[var(--color-sun)] px-5 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+            >
+              {readingIdx !== null && autoPlay ? "⏹️ Stop" : "🗣️ Read aloud"}
+            </button>
+          )}
           <button
             onClick={handleStrip}
             disabled={downloading}
@@ -395,7 +661,13 @@ function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {comic.panels.map((p, i) => (
-          <article key={i} className="panel-card overflow-hidden p-0">
+          <article
+            key={i}
+            id={`panel-${i}`}
+            className={`panel-card overflow-hidden p-0 transition-all ${
+              readingIdx === i ? "ring-4 ring-[var(--color-sun)] ring-offset-2" : ""
+            }`}
+          >
             <div className="relative aspect-square w-full bg-[var(--color-muted)]">
               <img
                 src={p.imageUrl}
@@ -406,13 +678,28 @@ function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
               <span className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-foreground bg-[var(--color-sun)] font-display text-sm">
                 {i + 1}
               </span>
-              <button
-                onClick={() => downloadImageUrl(p.imageUrl, `${slug(comic.title)}-panel-${i + 1}.png`)}
-                title="Download this panel"
-                className="absolute right-3 top-3 flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
-              >
-                ⬇️
-              </button>
+              <div className="absolute right-3 top-3 flex gap-2">
+                {ttsSupported && (
+                  <button
+                    onClick={() =>
+                      readingIdx === i ? stopReading() : speakPanel(i, false)
+                    }
+                    title="Read this panel"
+                    className="flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
+                  >
+                    {readingIdx === i ? "⏹️" : "🗣️"}
+                  </button>
+                )}
+                <button
+                  onClick={() =>
+                    downloadImageUrl(p.imageUrl, `${slug(comic.title)}-panel-${i + 1}.png`)
+                  }
+                  title="Download this panel"
+                  className="flex h-8 items-center gap-1 rounded-full border-2 border-foreground bg-[var(--color-card)] px-3 font-display text-xs transition-transform hover:-translate-y-0.5"
+                >
+                  ⬇️
+                </button>
+              </div>
               {p.dialogue && (
                 <div className="absolute bottom-3 left-3 right-3">
                   <div className="speech-bubble text-sm">
@@ -428,6 +715,61 @@ function ComicView({ comic, onReset }: { comic: Comic; onReset: () => void }) {
           </article>
         ))}
       </div>
+
+      <section className="mt-10">
+        <div className="panel-card bg-[var(--color-accent)] p-6">
+          <h3 className="font-display text-2xl">📜 What happens next?</h3>
+          <p className="mt-1 text-sm text-foreground/80">
+            Tell us what you think happens next and we'll draw 3 more panels!
+          </p>
+
+          {!showNextBox ? (
+            <button
+              onClick={() => setShowNextBox(true)}
+              className="panel-card mt-4 inline-flex items-center gap-2 bg-[var(--color-card)] px-5 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+            >
+              ✏️ Continue the story
+            </button>
+          ) : (
+            <div className="mt-4">
+              <textarea
+                value={whatsNext}
+                onChange={(e) => setWhatsNext(e.target.value)}
+                maxLength={400}
+                rows={3}
+                placeholder="e.g. They find a hidden cave with a magical map inside…"
+                className="w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">{whatsNext.length}/400</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowNextBox(false);
+                      setWhatsNext("");
+                    }}
+                    className="panel-card bg-[var(--color-muted)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={whatsNext.trim().length < 3 || extendMutation.isPending}
+                    onClick={() => extendMutation.mutate()}
+                    className="panel-card bg-[var(--color-primary)] px-5 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+                  >
+                    {extendMutation.isPending ? "✨ Drawing…" : "📖 Add 3 panels"}
+                  </button>
+                </div>
+              </div>
+              {extendMutation.isPending && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Painting 3 new panels — about 15–30 seconds…
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
