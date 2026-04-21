@@ -35,21 +35,25 @@ function buildSystemPrompt(opts: {
   isCustom: boolean;
   language: string;
   twist?: string;
+  hero?: string;
   numPanels: number;
   continuation?: boolean;
 }) {
-  const { isCustom, language, twist, numPanels, continuation } = opts;
+  const { isCustom, language, twist, hero, numPanels, continuation } = opts;
   const base = isCustom
     ? `You are a delightful children's storyteller making a fun, faith-friendly comic for kids ages 5-10. Use the kid's idea as the spark. Keep it warm, kind, age-appropriate, and full of wonder — gentle Bible/Christian values are welcome but never preachy.`
     : `You are a delightful children's Bible storyteller. Create a comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible.`;
 
   const twistLine = twist ? ` Apply this twist: ${twist}.` : "";
+  const heroLine = hero
+    ? ` Insert this kid as the main hero (or a prominent helper if the story already has a fixed protagonist like Moses): ${hero}. Use their name in captions and dialogue. In every "scene" description, describe their appearance consistently so the illustrator draws the SAME character every panel.`
+    : "";
   const langLine = ` Write the title, captions, and dialogue in ${language}.`;
   const contLine = continuation
     ? ` This is a CONTINUATION — pick up exactly where the previous story ended and continue naturally. Reuse the same characters, setting, and tone.`
     : "";
 
-  return `${base}${twistLine}${langLine}${contLine} Invent a short, playful comic title (also in ${language}). For each of ${numPanels} panels provide:
+  return `${base}${twistLine}${heroLine}${langLine}${contLine} Invent a short, playful comic title (also in ${language}). For each of ${numPanels} panels provide:
 - "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator, IN ENGLISH (illustrator only understands English). NO text/words in the image description.
 - "caption": 1-2 short sentences of kid-friendly narration in ${language}.
 - "dialogue" (optional): a single short line a character says in ${language}, with their name.
