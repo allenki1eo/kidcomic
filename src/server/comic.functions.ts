@@ -65,6 +65,7 @@ async function generateStoryPanels(args: {
   customIdea?: string;
   language?: string;
   twist?: string;
+  hero?: string;
   numPanels?: number;
   previousPanels?: Panel[];
   previousTitle?: string;
@@ -81,6 +82,7 @@ async function generateStoryPanels(args: {
     isCustom,
     language,
     twist: args.twist,
+    hero: args.hero?.trim() || undefined,
     numPanels,
     continuation,
   });
