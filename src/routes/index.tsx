@@ -829,12 +829,88 @@ function ComicView({
             )}
           </div>
           <button
+            disabled={pdfBusy !== null}
+            onClick={async () => {
+              setPdfBusy("pdf");
+              try {
+                await downloadStorybookPDF(comic);
+              } catch {
+                toast.error("Couldn't build the PDF.");
+              } finally {
+                setPdfBusy(null);
+              }
+            }}
+            className="panel-card bg-[var(--color-primary)] px-4 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            {pdfBusy === "pdf" ? "📖 Building…" : "📖 PDF storybook"}
+          </button>
+          <button
+            disabled={pdfBusy !== null}
+            onClick={async () => {
+              setPdfBusy("color");
+              try {
+                await downloadColoringBookPDF(comic);
+              } catch {
+                toast.error("Couldn't build the coloring book.");
+              } finally {
+                setPdfBusy(null);
+              }
+            }}
+            className="panel-card bg-[var(--color-card)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            {pdfBusy === "color" ? "🖍️ Tracing…" : "🖍️ Coloring book"}
+          </button>
+          <button
             onClick={handleStrip}
             disabled={downloading}
-            className="panel-card bg-[var(--color-primary)] px-5 py-2 font-display text-sm text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            className="panel-card bg-[var(--color-card)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {downloading ? "📦 Packing…" : "⬇️ Download comic"}
+            {downloading ? "📦 Packing…" : "🖼️ PNG strip"}
           </button>
+          {savedShareId ? (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/c/${savedShareId}`);
+                toast.success("🔗 Share link copied!");
+              }}
+              className="panel-card bg-[var(--color-sun)] px-4 py-2 font-display text-sm transition-transform hover:-translate-y-0.5"
+            >
+              🔗 Copy share link
+            </button>
+          ) : (
+            <button
+              disabled={saveState === "saving"}
+              onClick={async () => {
+                if (!user) {
+                  toast.info("Sign in to save comics to your gallery.");
+                  window.location.href = "/auth";
+                  return;
+                }
+                setSaveState("saving");
+                try {
+                  const { shareId } = await saveComic({
+                    data: {
+                      title: comic.title,
+                      panels: comic.panels,
+                      styleId: currentStyle.id,
+                      styleName: currentStyle.name,
+                      language: language.code,
+                      isPublic: true,
+                    },
+                  });
+                  setSavedShareId(shareId);
+                  setSaveState("saved");
+                  toast.success("✨ Saved to your gallery!");
+                } catch (e) {
+                  setSaveState("idle");
+                  toast.error(e instanceof Error ? e.message : "Couldn't save");
+                }
+              }}
+              className="panel-card bg-[var(--color-berry)] px-4 py-2 font-display text-sm text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {saveState === "saving" ? "💾 Saving…" : user ? "💾 Save & share" : "👋 Sign in to save"}
+            </button>
+          )}
           <button
             onClick={onReset}
             className="panel-card bg-[var(--color-secondary)] px-5 py-2 font-display text-sm text-[var(--color-secondary-foreground)] transition-transform hover:-translate-y-0.5"
