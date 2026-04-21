@@ -356,8 +356,10 @@ function Home() {
         {comic && (
           <ComicView
             comic={comic}
+            setComic={setComic}
             language={language}
-            styleHint={style.promptHint}
+            currentStyle={style}
+            onStyleChange={setStyle}
             onReset={reset}
             onAppend={appendPanels}
           />
