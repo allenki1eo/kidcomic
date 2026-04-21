@@ -11,18 +11,14 @@ type ComicResult = {
   panels: Array<Panel & { imageUrl: string }>;
 };
 
-const OPENROUTER_STORY_MODELS = [
-  "google/gemma-3-27b-it:free",
-  "google/gemma-3-12b-it:free",
-  "google/gemma-4-31b-it:free",
-] as const;
+const STORY_MODEL = "google/gemini-3-flash-preview";
 
 async function generateStoryPanels(
   storyTitle: string,
   customIdea?: string,
 ): Promise<{ title: string; panels: Panel[] }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
   const isCustom = !!customIdea?.trim();
   const systemPrompt = isCustom
