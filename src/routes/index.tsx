@@ -325,6 +325,10 @@ function Home() {
                 </div>
               </div>
             </section>
+
+            <section className="mt-12 flex flex-col items-center">
+              <button
+                disabled={!canGenerate || mutation.isPending}
                 onClick={() => mutation.mutate()}
                 className="panel-card group inline-flex items-center gap-3 px-8 py-5 font-display text-xl text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                 style={{ background: "var(--gradient-sunset)" }}
