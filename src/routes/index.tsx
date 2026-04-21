@@ -666,6 +666,90 @@ function ComicView({
     },
   });
 
+  const openEdit = (i: number) => {
+    const d = comic.panels[i].dialogue;
+    setEditingIdx(i);
+    setEditSpeaker(d?.speaker ?? "");
+    setEditText(d?.text ?? "");
+  };
+
+  const saveEdit = async () => {
+    if (editingIdx === null) return;
+    const i = editingIdx;
+    const speaker = editSpeaker.trim();
+    const text = editText.trim();
+    const newDialogue =
+      speaker && text ? { speaker, text } : undefined;
+    setComic((c) =>
+      c
+        ? {
+            ...c,
+            panels: c.panels.map((p, idx) =>
+              idx === i ? { ...p, dialogue: newDialogue } : p,
+            ),
+          }
+        : c,
+    );
+    setEditingIdx(null);
+
+    // Re-render just that panel image so the new line fits the scene
+    try {
+      setRegeneratingIdx(i);
+      const sceneWithLine = newDialogue
+        ? `${comic.panels[i].scene}. The character ${newDialogue.speaker} is shown speaking.`
+        : comic.panels[i].scene;
+      const { imageUrl } = await regeneratePanelImage({
+        data: { scene: sceneWithLine, styleHint },
+      });
+      setComic((c) =>
+        c
+          ? {
+              ...c,
+              panels: c.panels.map((p, idx) =>
+                idx === i ? { ...p, imageUrl } : p,
+              ),
+            }
+          : c,
+      );
+      toast.success("✏️ Panel updated!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't redraw the panel.");
+    } finally {
+      setRegeneratingIdx(null);
+    }
+  };
+
+  const handleRestyle = async (newStyle: ArtStyle) => {
+    if (newStyle.id === currentStyle.id) {
+      setShowStylePicker(false);
+      return;
+    }
+    setShowStylePicker(false);
+    setRestyling(true);
+    try {
+      const { imageUrls } = await restyleComic({
+        data: {
+          scenes: comic.panels.map((p) => p.scene),
+          styleHint: newStyle.promptHint,
+        },
+      });
+      setComic((c) =>
+        c
+          ? {
+              ...c,
+              panels: c.panels.map((p, i) => ({ ...p, imageUrl: imageUrls[i] ?? p.imageUrl })),
+            }
+          : c,
+      );
+      onStyleChange(newStyle);
+      toast.success(`🎭 Restyled in ${newStyle.name}!`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't restyle the comic.");
+    } finally {
+      setRestyling(false);
+    }
+  };
+
   return (
     <section id="comic-top" className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
