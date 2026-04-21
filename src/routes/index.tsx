@@ -299,9 +299,32 @@ function Home() {
               </div>
             </section>
 
-            <section className="mt-12 flex flex-col items-center">
-              <button
-                disabled={!canGenerate || mutation.isPending}
+            <section className="mt-12">
+              <SectionTitle step={4} title="Star yourself in the story (optional)" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Add a kid as the hero — name + a few details about how they look.
+              </p>
+              <div className="mt-4">
+                <input
+                  value={hero}
+                  onChange={(e) => setHero(e.target.value)}
+                  maxLength={300}
+                  placeholder="e.g. a 7-year-old girl named Maya with curly brown hair and red glasses"
+                  className="w-full rounded-xl border-2 border-foreground bg-[var(--color-card)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-sun)]/40"
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{hero.length}/300</span>
+                  {hero && (
+                    <button
+                      onClick={() => setHero("")}
+                      className="font-display text-xs underline-offset-4 hover:underline"
+                    >
+                      ✕ clear hero
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
                 onClick={() => mutation.mutate()}
                 className="panel-card group inline-flex items-center gap-3 px-8 py-5 font-display text-xl text-[var(--color-primary-foreground)] transition-transform hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                 style={{ background: "var(--gradient-sunset)" }}
