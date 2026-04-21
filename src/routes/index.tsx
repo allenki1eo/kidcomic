@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { STORIES, ART_STYLES, type Story, type ArtStyle } from "@/lib/comic-data";
@@ -8,6 +8,9 @@ import {
   regeneratePanelImage,
   restyleComic,
 } from "@/server/comic.functions";
+import { saveComic } from "@/server/library.functions";
+import { useAuth } from "@/lib/auth-context";
+import { downloadStorybookPDF, downloadColoringBookPDF } from "@/lib/comic-export";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
