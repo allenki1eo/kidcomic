@@ -1,0 +1,154 @@
+import { createServerFn } from "@tanstack/react-start";
+
+type Panel = {
+  scene: string; // visual description for image gen
+  caption: string; // narration text
+  dialogue?: { speaker: string; text: string };
+};
+
+type ComicResult = {
+  title: string;
+  panels: Array<Panel & { imageUrl: string }>;
+};
+
+async function generateStoryPanels(storyTitle: string): Promise<{ title: string; panels: Panel[] }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+
+  const systemPrompt = `You are a delightful children's Bible storyteller. Create a 6-panel comic strip from a Bible story for kids ages 5-10. Keep language simple, warm, age-appropriate, and faithful to the Bible. For each panel provide:
+- "scene": a vivid one-sentence visual description (characters, setting, action) for an illustrator. NO text/words in the image description.
+- "caption": 1-2 short sentences of kid-friendly narration.
+- "dialogue" (optional): a single short line a character says, with their name.
+Return ONLY valid JSON.`;
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://lovable.dev",
+      "X-Title": "Kids Bible Comics",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.0-flash-exp:free",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Bible story: "${storyTitle}". Create the 6-panel comic now.` },
+      ],
+      response_format: { type: "json_object" },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "create_comic",
+            description: "Return a 6-panel kids Bible comic.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                panels: {
+                  type: "array",
+                  minItems: 6,
+                  maxItems: 6,
+                  items: {
+                    type: "object",
+                    properties: {
+                      scene: { type: "string" },
+                      caption: { type: "string" },
+                      dialogue: {
+                        type: "object",
+                        properties: {
+                          speaker: { type: "string" },
+                          text: { type: "string" },
+                        },
+                      },
+                    },
+                    required: ["scene", "caption"],
+                  },
+                },
+              },
+              required: ["title", "panels"],
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "create_comic" } },
+    }),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`OpenRouter error ${res.status}: ${t.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  let parsed: { title: string; panels: Panel[] } | null = null;
+  if (toolCall?.function?.arguments) {
+    try {
+      parsed = JSON.parse(toolCall.function.arguments);
+    } catch {}
+  }
+  if (!parsed) {
+    const content = data.choices?.[0]?.message?.content;
+    if (content) {
+      try {
+        parsed = JSON.parse(content);
+      } catch {}
+    }
+  }
+  if (!parsed?.panels?.length) throw new Error("Story generation returned no panels");
+  return parsed;
+}
+
+async function generatePanelImage(scene: string, styleHint: string): Promise<string> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
+
+  const prompt = `${styleHint}. Single comic book panel illustration. Scene: ${scene}. Reverent, joyful, warm and kid-friendly. NO text, NO words, NO letters in the image. Square composition.`;
+
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-image",
+      messages: [{ role: "user", content: prompt }],
+      modalities: ["image", "text"],
+    }),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Image gen error ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const url = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!url) throw new Error("No image returned");
+  return url;
+}
+
+export const generateComic = createServerFn({ method: "POST" })
+  .inputValidator((input: { storyTitle: string; styleHint: string }) => {
+    if (!input?.storyTitle || typeof input.storyTitle !== "string") {
+      throw new Error("storyTitle required");
+    }
+    if (!input?.styleHint || typeof input.styleHint !== "string") {
+      throw new Error("styleHint required");
+    }
+    if (input.storyTitle.length > 200 || input.styleHint.length > 500) {
+      throw new Error("input too long");
+    }
+    return input;
+  })
+  .handler(async ({ data }): Promise<ComicResult> => {
+    const story = await generateStoryPanels(data.storyTitle);
+    const images = await Promise.all(
+      story.panels.map((p) => generatePanelImage(p.scene, data.styleHint)),
+    );
+    return {
+      title: story.title,
+      panels: story.panels.map((p, i) => ({ ...p, imageUrl: images[i] })),
+    };
+  });
