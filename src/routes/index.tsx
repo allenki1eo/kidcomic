@@ -410,8 +410,26 @@ function LanguagePicker({
 }
 
 function Header() {
+  const { user } = useAuth();
   return (
-    <header className="text-center">
+    <header className="relative text-center">
+      <div className="absolute right-0 top-0 flex gap-2">
+        {user ? (
+          <Link
+            to="/gallery"
+            className="panel-card bg-[var(--color-card)] px-3 py-1 font-display text-xs transition-transform hover:-translate-y-0.5"
+          >
+            🏛️ My Comics
+          </Link>
+        ) : (
+          <Link
+            to="/auth"
+            className="panel-card bg-[var(--color-card)] px-3 py-1 font-display text-xs transition-transform hover:-translate-y-0.5"
+          >
+            👋 Sign in
+          </Link>
+        )}
+      </div>
       <div className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-[var(--color-accent)] px-4 py-1 font-display text-xs uppercase tracking-wider">
         <span>📖</span> Bible Buddies
       </div>
