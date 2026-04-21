@@ -69,6 +69,7 @@ function Home() {
   const [comic, setComic] = useState<Comic | null>(null);
   const [language, setLanguage] = useState<Language>(LANGUAGES[0]);
   const [twist, setTwist] = useState("");
+  const [hero, setHero] = useState("");
 
   const canGenerate = mode === "write" ? customIdea.trim().length > 3 : !!story;
 
@@ -82,6 +83,7 @@ function Home() {
           customIdea: mode === "write" ? customIdea.trim() : undefined,
           language: language.code,
           twist: twist.trim() || undefined,
+          hero: hero.trim() || undefined,
         },
       });
     },
@@ -101,6 +103,7 @@ function Home() {
     setStory(null);
     setCustomIdea("");
     setTwist("");
+    setHero("");
     setMode("pick");
   };
 
