@@ -239,39 +239,27 @@ The kid wants to know what happens next. Continue the story with ${numPanels} ne
 
 // ─── Pollinations AI Image Generation ─────────────────────────────────────────
 
-/**
- * Generate an image using Pollinations AI.
- * Free, no API key required, CORS-friendly.
- * Docs: https://pollinations.ai
- */
-async function generatePanelImage(scene: string, styleHint: string): Promise<string> {
+function makePanelImageUrl(scene: string, styleHint: string, seed: number): string {
   const prompt = encodeURIComponent(
     `${styleHint}. ${scene}. Reverent, joyful, warm and kid-friendly. NO text, NO words, NO letters in the image.`
   );
+  return `https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
+}
 
-  // Use a random seed so the same prompt gives different results each time
-  const seed = Math.floor(Math.random() * 1000000);
-  const url = `https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
+function generatePanelImageUrl(scene: string, styleHint: string): string {
+  const seed = Math.floor(Math.random() * 1_000_000);
+  return makePanelImageUrl(scene, styleHint, seed);
+}
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Image generation failed: ${res.status}`);
-    }
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  } catch (e) {
-    // If fetch fails entirely, return the URL directly as a fallback
-    // (Pollinations supports direct img src usage too)
-    console.warn("Pollinations fetch failed, using direct URL:", e);
-    return url;
-  }
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Generate a complete comic: story panels + images.
+ * Images are generated sequentially with a small delay to avoid rate limits.
  */
 export async function generateComic(opts: GenerateOpts): Promise<ComicResult> {
   if (!opts.styleHint || typeof opts.styleHint !== "string") {
@@ -292,9 +280,14 @@ export async function generateComic(opts: GenerateOpts): Promise<ComicResult> {
     numPanels: 6,
   });
 
-  const images = await Promise.all(
-    story.panels.map((p) => generatePanelImage(p.scene, opts.styleHint)),
-  );
+  // Generate images sequentially with a delay to avoid overwhelming Pollinations
+  const images: string[] = [];
+  for (const panel of story.panels) {
+    images.push(generatePanelImageUrl(panel.scene, opts.styleHint));
+    if (images.length < story.panels.length) {
+      await sleep(700);
+    }
+  }
 
   return {
     title: story.title,
@@ -310,7 +303,7 @@ export async function regeneratePanelImage(opts: {
   styleHint: string;
 }): Promise<{ imageUrl: string }> {
   if (!opts.scene || !opts.styleHint) throw new Error("scene and styleHint required");
-  const url = await generatePanelImage(opts.scene, opts.styleHint);
+  const url = generatePanelImageUrl(opts.scene, opts.styleHint);
   return { imageUrl: url };
 }
 
@@ -329,9 +322,13 @@ export async function restyleComic(opts: {
     throw new Error("styleHint required");
   }
 
-  const imageUrls = await Promise.all(
-    opts.scenes.map((s) => generatePanelImage(s, opts.styleHint)),
-  );
+  const imageUrls: string[] = [];
+  for (const scene of opts.scenes) {
+    imageUrls.push(generatePanelImageUrl(scene, opts.styleHint));
+    if (imageUrls.length < opts.scenes.length) {
+      await sleep(700);
+    }
+  }
   return { imageUrls };
 }
 
@@ -356,12 +353,24 @@ export async function extendComic(opts: ExtendOpts): Promise<ComicResult> {
     previousTitle: opts.previousTitle,
   });
 
-  const images = await Promise.all(
-    story.panels.map((p) => generatePanelImage(p.scene, opts.styleHint)),
-  );
+  const images: string[] = [];
+  for (const panel of story.panels) {
+    images.push(generatePanelImageUrl(panel.scene, opts.styleHint));
+    if (images.length < story.panels.length) {
+      await sleep(700);
+    }
+  }
 
   return {
     title: story.title,
     panels: story.panels.map((p, i) => ({ ...p, imageUrl: images[i] })),
   };
+}
+
+/**
+ * Create a fresh URL for a panel image with a new random seed.
+ * Useful for retrying failed image loads.
+ */
+export function retryPanelImageUrl(scene: string, styleHint: string): string {
+  return generatePanelImageUrl(scene, styleHint);
 }

@@ -7,6 +7,7 @@ import {
   extendComic,
   regeneratePanelImage,
   restyleComic,
+  retryPanelImageUrl,
   type ComicResult,
 } from "@/lib/ai-api";
 import { saveComic } from "@/lib/library-api";
@@ -64,6 +65,7 @@ function Home() {
   const [language, setLanguage] = useState<Language>(LANGUAGES[0]);
   const [twist, setTwist] = useState("");
   const [hero, setHero] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
 
   const canGenerate = mode === "write" ? customIdea.trim().length > 3 : !!story;
 
@@ -97,6 +99,7 @@ function Home() {
     setTwist("");
     setHero("");
     setMode("pick");
+    setShowOptions(false);
   };
 
   const surpriseMeIdea = () => {
@@ -130,83 +133,82 @@ function Home() {
   };
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 sm:py-12">
+    <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
       <Toaster position="top-center" />
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-5xl">
         <Header />
 
         {!comic && (
           <>
-            <section className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {/* Top bar */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
               <button
                 onClick={fullRemix}
-                className="panel-card inline-flex items-center gap-2 bg-[var(--color-berry)] px-5 py-3 font-display text-base text-white transition-transform hover:-translate-y-1"
+                className="panel-card inline-flex items-center gap-2 bg-[var(--color-berry)] px-4 py-2 font-display text-sm text-white transition-transform hover:-translate-y-1"
               >
-                🎲 Surprise me — full remix!
+                🎲 Surprise me
               </button>
               <LanguagePicker value={language} onChange={setLanguage} />
-            </section>
+            </div>
 
+            {/* Story */}
             <section className="mt-8">
-              <SectionTitle step={1} title="Choose your adventure" />
-
-              <div className="mt-5 inline-flex rounded-full border-2 border-foreground bg-[var(--color-card)] p-1 font-display text-sm">
-                <button
-                  onClick={() => setMode("pick")}
-                  className={`rounded-full px-4 py-2 transition-colors ${
-                    mode === "pick"
-                      ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
-                      : "text-foreground/70 hover:text-foreground"
-                  }`}
-                >
-                  📖 Pick a Bible story
-                </button>
-                <button
-                  onClick={() => setMode("write")}
-                  className={`rounded-full px-4 py-2 transition-colors ${
-                    mode === "write"
-                      ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
-                      : "text-foreground/70 hover:text-foreground"
-                  }`}
-                >
-                  ✍️ Write my own
-                </button>
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-2xl sm:text-3xl">Choose a story</h2>
+                <div className="inline-flex rounded-full border-2 border-foreground bg-[var(--color-card)] p-1 font-display text-xs">
+                  <button
+                    onClick={() => setMode("pick")}
+                    className={`rounded-full px-3 py-1.5 transition-colors ${
+                      mode === "pick"
+                        ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
+                        : "text-foreground/70 hover:text-foreground"
+                    }`}
+                  >
+                    📖 Bible stories
+                  </button>
+                  <button
+                    onClick={() => setMode("write")}
+                    className={`rounded-full px-3 py-1.5 transition-colors ${
+                      mode === "write"
+                        ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]"
+                        : "text-foreground/70 hover:text-foreground"
+                    }`}
+                  >
+                    ✍️ My idea
+                  </button>
+                </div>
               </div>
 
               {mode === "pick" ? (
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                   {STORIES.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setStory(s)}
-                      className={`panel-card group flex flex-col items-center gap-2 p-4 text-center transition-transform hover:-translate-y-1 ${
+                      className={`panel-card group flex flex-col items-center gap-1.5 p-3 text-center transition-transform hover:-translate-y-1 ${
                         story?.id === s.id
                           ? "ring-4 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)]"
                           : ""
                       }`}
                     >
-                      <span className="text-4xl transition-transform group-hover:scale-110">
+                      <span className="text-3xl transition-transform group-hover:scale-110">
                         {s.emoji}
                       </span>
-                      <span className="font-display text-base leading-tight">{s.title}</span>
-                      <span className="text-xs text-muted-foreground">{s.blurb}</span>
+                      <span className="font-display text-sm leading-tight">{s.title}</span>
+                      <span className="text-[11px] text-muted-foreground leading-tight">{s.blurb}</span>
                     </button>
                   ))}
                 </div>
               ) : (
-                <div className="mt-5">
+                <div className="mt-4">
                   <div className="panel-card p-4">
-                    <label className="font-display text-sm" htmlFor="ideaBox">
-                      What should the comic be about? ✨
-                    </label>
                     <textarea
-                      id="ideaBox"
                       value={customIdea}
                       onChange={(e) => setCustomIdea(e.target.value)}
                       maxLength={500}
                       rows={3}
                       placeholder="e.g. A brave little lamb who helps a lost shepherd find his way home…"
-                      className="mt-2 w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
+                      className="w-full resize-none rounded-xl border-2 border-foreground bg-[var(--color-background)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-primary)]/40"
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>{customIdea.length}/500</span>
@@ -218,8 +220,7 @@ function Home() {
                       </button>
                     </div>
                   </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     {FUN_IDEAS.map((idea) => (
                       <button
                         key={idea}
@@ -234,91 +235,96 @@ function Home() {
               )}
             </section>
 
-            <section className="mt-12">
-              <SectionTitle step={2} title="Pick an art style" />
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Art Style */}
+            <section className="mt-8">
+              <h2 className="font-display text-2xl sm:text-3xl">Pick a style</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
                 {ART_STYLES.map((a) => (
                   <button
                     key={a.id}
                     onClick={() => setStyle(a)}
-                    className={`panel-card flex flex-col items-center gap-2 p-4 text-center transition-transform hover:-translate-y-1 ${
+                    className={`panel-card inline-flex items-center gap-2 px-4 py-2.5 font-display text-sm transition-transform hover:-translate-y-1 ${
                       style.id === a.id
-                        ? "ring-4 ring-[var(--color-berry)] ring-offset-2 ring-offset-[var(--color-background)]"
-                        : ""
+                        ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)]"
+                        : "bg-[var(--color-card)]"
                     }`}
                   >
-                    <span className="text-3xl">{a.emoji}</span>
-                    <span className="font-display text-sm">{a.name}</span>
-                    <span className="text-xs text-muted-foreground">{a.description}</span>
+                    <span className="text-xl">{a.emoji}</span>
+                    <span>{a.name}</span>
                   </button>
                 ))}
               </div>
             </section>
 
-            <section className="mt-12">
-              <SectionTitle step={3} title="Add a fun twist (optional)" />
-              <div className="mt-5">
-                <input
-                  value={twist}
-                  onChange={(e) => setTwist(e.target.value)}
-                  maxLength={200}
-                  placeholder="e.g. told from the donkey's POV, set in space, as a musical…"
-                  className="w-full rounded-xl border-2 border-foreground bg-[var(--color-card)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-berry)]/40"
-                />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {TWISTS.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTwist(t)}
-                      className={`rounded-full border-2 border-foreground px-3 py-1 text-xs font-semibold transition-transform hover:-translate-y-0.5 ${
-                        twist === t
-                          ? "bg-[var(--color-berry)] text-white"
-                          : "bg-[var(--color-card)]"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                  {twist && (
-                    <button
-                      onClick={() => setTwist("")}
-                      className="rounded-full border-2 border-foreground bg-[var(--color-muted)] px-3 py-1 text-xs font-semibold"
-                    >
-                      ✕ clear
-                    </button>
-                  )}
+            {/* More Options */}
+            <section className="mt-6">
+              <button
+                onClick={() => setShowOptions((v) => !v)}
+                className="flex items-center gap-2 font-display text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <span className="text-lg">{showOptions ? "▼" : "▶"}</span>
+                More options (twist, hero, etc.)
+              </button>
+
+              {showOptions && (
+                <div className="mt-3 space-y-4">
+                  <div className="panel-card p-4">
+                    <label className="font-display text-sm">Fun twist <span className="text-muted-foreground">(optional)</span></label>
+                    <input
+                      value={twist}
+                      onChange={(e) => setTwist(e.target.value)}
+                      maxLength={200}
+                      placeholder="e.g. told from the donkey's POV, set in space, as a musical…"
+                      className="mt-2 w-full rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2.5 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-berry)]/40"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {TWISTS.map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setTwist(t)}
+                          className={`rounded-full border-2 border-foreground px-3 py-1 text-xs font-semibold transition-transform hover:-translate-y-0.5 ${
+                            twist === t
+                              ? "bg-[var(--color-berry)] text-white"
+                              : "bg-[var(--color-card)]"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                      {twist && (
+                        <button
+                          onClick={() => setTwist("")}
+                          className="rounded-full border-2 border-foreground bg-[var(--color-muted)] px-3 py-1 text-xs font-semibold"
+                        >
+                          ✕ clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="panel-card p-4">
+                    <label className="font-display text-sm">Star yourself <span className="text-muted-foreground">(optional)</span></label>
+                    <p className="text-xs text-muted-foreground">Add a kid as the hero — name + how they look.</p>
+                    <input
+                      value={hero}
+                      onChange={(e) => setHero(e.target.value)}
+                      maxLength={300}
+                      placeholder="e.g. a 7-year-old girl named Maya with curly brown hair and red glasses"
+                      className="mt-2 w-full rounded-xl border-2 border-foreground bg-[var(--color-background)] p-2.5 font-sans text-sm outline-none focus:ring-4 focus:ring-[var(--color-sun)]/40"
+                    />
+                    <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{hero.length}/300</span>
+                      {hero && (
+                        <button onClick={() => setHero("")} className="underline-offset-4 hover:underline">✕ clear</button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </section>
 
-            <section className="mt-12">
-              <SectionTitle step={4} title="Star yourself in the story (optional)" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                Add a kid as the hero — name + a few details about how they look.
-              </p>
-              <div className="mt-4">
-                <input
-                  value={hero}
-                  onChange={(e) => setHero(e.target.value)}
-                  maxLength={300}
-                  placeholder="e.g. a 7-year-old girl named Maya with curly brown hair and red glasses"
-                  className="w-full rounded-xl border-2 border-foreground bg-[var(--color-card)] p-3 font-sans text-base outline-none focus:ring-4 focus:ring-[var(--color-sun)]/40"
-                />
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>{hero.length}/300</span>
-                  {hero && (
-                    <button
-                      onClick={() => setHero("")}
-                      className="font-display text-xs underline-offset-4 hover:underline"
-                    >
-                      ✕ clear hero
-                    </button>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section className="mt-12 flex flex-col items-center">
+            {/* Generate */}
+            <section className="mt-10 flex flex-col items-center">
               <button
                 disabled={!canGenerate || mutation.isPending}
                 onClick={() => mutation.mutate()}
@@ -364,6 +370,7 @@ function Home() {
     </main>
   );
 }
+
 
 function LanguagePicker({
   value,
@@ -430,14 +437,69 @@ function Header() {
   );
 }
 
-function SectionTitle({ step, title }: { step: number; title: string }) {
+// ─── Image helpers ───────────────────────────────────────────────────────────
+
+function PanelImage({
+  scene,
+  styleHint,
+  src,
+  alt,
+  className,
+  loading,
+}: {
+  scene: string;
+  styleHint: string;
+  src: string;
+  alt: string;
+  className?: string;
+  loading?: "eager" | "lazy";
+}) {
+  const [url, setUrl] = useState(src);
+  const [retried, setRetried] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setUrl(src);
+    setRetried(false);
+    setError(false);
+  }, [src]);
+
+  const handleError = () => {
+    if (!retried) {
+      setUrl(retryPanelImageUrl(scene, styleHint));
+      setRetried(true);
+    } else {
+      setError(true);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 bg-[var(--color-muted)] ${className}`}>
+        <span className="text-2xl">😕</span>
+        <span className="px-4 text-center text-xs text-muted-foreground">Image failed to load.</span>
+        <button
+          onClick={() => {
+            setUrl(retryPanelImageUrl(scene, styleHint));
+            setError(false);
+          }}
+          className="panel-card bg-[var(--color-card)] px-3 py-1 text-xs font-display"
+        >
+          🔄 Try again
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-foreground bg-[var(--color-sun)] font-display text-lg">
-        {step}
-      </span>
-      <h2 className="font-display text-2xl sm:text-3xl">{title}</h2>
-    </div>
+    <img
+      src={url}
+      alt={alt}
+      crossOrigin="anonymous"
+      loading={loading}
+      onError={handleError}
+      className={className}
+    />
   );
 }
 
@@ -689,8 +751,7 @@ function ComicView({
     const i = editingIdx;
     const speaker = editSpeaker.trim();
     const text = editText.trim();
-    const newDialogue =
-      speaker && text ? { speaker, text } : undefined;
+    const newDialogue = speaker && text ? { speaker, text } : undefined;
     setComic((c) =>
       c
         ? {
@@ -907,11 +968,13 @@ function ComicView({
             }`}
           >
             <div className="relative aspect-square w-full bg-[var(--color-muted)]">
-              <img
+              <PanelImage
+                scene={p.scene}
+                styleHint={styleHint}
                 src={p.imageUrl}
                 alt={p.scene}
-                className="h-full w-full object-cover"
                 loading={i < 2 ? "eager" : "lazy"}
+                className="h-full w-full object-cover"
               />
               {(regeneratingIdx === i || restyling) && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--color-background)]/70 backdrop-blur-sm">
