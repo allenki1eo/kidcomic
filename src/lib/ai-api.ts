@@ -1,10 +1,12 @@
 /**
  * AI Comic Generation API
- * Uses Groq for text/story generation and Hugging Face for image generation.
+ * Uses Groq for text/story generation and Pollinations AI for image generation.
  * Replaces the Lovable AI gateway.
+ *
+ * - Groq (https://console.groq.com): Free tier available. Handles story text generation.
+ * - Pollinations AI (https://pollinations.ai): Completely free, no API key needed.
+ *   Handles image generation. CORS-friendly.
  */
-
-import { ART_STYLES, type ArtStyle } from "./comic-data";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,10 +41,8 @@ type ExtendOpts = {
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
-const HF_API_KEY = import.meta.env.VITE_HUGGINGFACE_API_KEY || "";
 
 const STORY_MODEL = "llama-3.3-70b-versatile";
-const HF_IMAGE_MODEL = "stabilityai/stable-diffusion-3.5-large";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
@@ -106,7 +106,11 @@ async function generateStoryPanels(args: {
   previousPanels?: Panel[];
   previousTitle?: string;
 }): Promise<{ title: string; panels: Panel[] }> {
-  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured. Add it to your .env file.");
+  if (!GROQ_API_KEY || GROQ_API_KEY === "your_groq_api_key_here") {
+    throw new Error(
+      "GROQ_API_KEY is not configured. Add your Groq API key to your .env file (VITE_GROQ_API_KEY). Get one free at https://console.groq.com/keys"
+    );
+  }
 
   const numPanels = args.numPanels ?? 6;
   const language = languageName(args.language);
@@ -170,100 +174,98 @@ The kid wants to know what happens next. Continue the story with ${numPanels} ne
   let lastError = "Unknown AI error";
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: STORY_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        tools: [toolDef],
-        tool_choice: { type: "function", function: { name: "create_comic" } },
-        temperature: 0.85,
-        max_tokens: 4096,
-      }),
-    });
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: STORY_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          tools: [toolDef],
+          tool_choice: { type: "function", function: { name: "create_comic" } },
+          temperature: 0.85,
+          max_tokens: 4096,
+        }),
+      });
 
-    if (!res.ok) {
-      const t = await res.text();
-      lastError = `Groq error ${res.status}: ${t.slice(0, 300)}`;
-      if (res.status === 429) {
-        throw new Error("Whoa, too many comics at once! Please wait a moment and try again.");
+      if (!res.ok) {
+        const t = await res.text();
+        lastError = `Groq error ${res.status}: ${t.slice(0, 300)}`;
+        if (res.status === 429) {
+          throw new Error("Whoa, too many comics at once! Please wait a moment and try again.");
+        }
+        if (res.status === 401) {
+          throw new Error("Invalid Groq API key. Check your VITE_GROQ_API_KEY at https://console.groq.com/keys");
+        }
+        if (attempt === 0 && res.status >= 500) continue;
+        throw new Error(lastError);
       }
-      if (attempt === 0 && res.status >= 500) continue;
-      throw new Error(lastError);
-    }
 
-    const data = await res.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    let parsed: { title: string; panels: Panel[] } | null = null;
-    if (toolCall?.function?.arguments) {
-      try {
-        parsed = JSON.parse(toolCall.function.arguments);
-      } catch {
-        // ignore parse error
-      }
-    }
-    if (!parsed) {
-      const content = data.choices?.[0]?.message?.content;
-      if (content) {
+      const data = await res.json();
+      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+      let parsed: { title: string; panels: Panel[] } | null = null;
+      if (toolCall?.function?.arguments) {
         try {
-          parsed = JSON.parse(content);
+          parsed = JSON.parse(toolCall.function.arguments);
         } catch {
           // ignore parse error
         }
       }
+      if (!parsed) {
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          try {
+            parsed = JSON.parse(content);
+          } catch {
+            // ignore parse error
+          }
+        }
+      }
+      if (!parsed?.panels?.length) throw new Error("Story generation returned no panels");
+      return parsed;
+    } catch (e) {
+      if (attempt === 1) throw e;
     }
-    if (!parsed?.panels?.length) throw new Error("Story generation returned no panels");
-    return parsed;
   }
 
   throw new Error(lastError);
 }
 
-// ─── Hugging Face Image Generation ───────────────────────────────────────────
+// ─── Pollinations AI Image Generation ─────────────────────────────────────────
 
+/**
+ * Generate an image using Pollinations AI.
+ * Free, no API key required, CORS-friendly.
+ * Docs: https://pollinations.ai
+ */
 async function generatePanelImage(scene: string, styleHint: string): Promise<string> {
-  if (!HF_API_KEY) throw new Error("HUGGINGFACE_API_KEY is not configured. Add it to your .env file.");
-
-  const prompt = `${styleHint}. Single comic book panel illustration. Scene: ${scene}. Reverent, joyful, warm and kid-friendly. NO text, NO words, NO letters in the image. Square composition.`;
-
-  const res = await fetch(
-    `https://api-inference.huggingface.co/models/${HF_IMAGE_MODEL}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${HF_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          width: 1024,
-          height: 1024,
-          num_inference_steps: 28,
-          guidance_scale: 7.5,
-        },
-      }),
-    }
+  const prompt = encodeURIComponent(
+    `${styleHint}. ${scene}. Reverent, joyful, warm and kid-friendly. NO text, NO words, NO letters in the image.`
   );
 
-  if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) {
-      throw new Error("Too many image requests — please wait a moment and try again.");
-    }
-    throw new Error(`Image gen error ${res.status}: ${t.slice(0, 200)}`);
-  }
+  // Use a random seed so the same prompt gives different results each time
+  const seed = Math.floor(Math.random() * 1000000);
+  const url = `https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
 
-  // Hugging Face returns raw image bytes
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Image generation failed: ${res.status}`);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    // If fetch fails entirely, return the URL directly as a fallback
+    // (Pollinations supports direct img src usage too)
+    console.warn("Pollinations fetch failed, using direct URL:", e);
+    return url;
+  }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
