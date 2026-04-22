@@ -1,19 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { listMyComics, deleteComic } from "@/server/library.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { listMyComics, deleteComic } from "@/lib/library-api";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/gallery")({
   component: GalleryPage,
-  head: () => ({
-    meta: [
-      { title: "My Comics — Bible Buddies" },
-      { name: "description", content: "Your personal library of AI Bible comics." },
-    ],
-  }),
 });
 
 type Row = {
@@ -26,12 +19,6 @@ type Row = {
   is_public: boolean;
   created_at: string;
 };
-
-async function authedFetch<T>(fn: () => Promise<T>): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  if (!data.session) throw new Error("Not signed in");
-  return fn();
-}
 
 function GalleryPage() {
   const { user, loading, signOut } = useAuth();
@@ -47,7 +34,7 @@ function GalleryPage() {
     if (!user) return;
     (async () => {
       try {
-        const { comics } = await authedFetch(() => listMyComics());
+        const { comics } = await listMyComics();
         setRows(comics as unknown as Row[]);
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Failed to load");
@@ -58,7 +45,7 @@ function GalleryPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this comic? This can't be undone.")) return;
     try {
-      await authedFetch(() => deleteComic({ data: { id } }));
+      await deleteComic({ id });
       setRows((r) => r?.filter((x) => x.id !== id) ?? null);
       toast.success("Deleted");
     } catch (e) {

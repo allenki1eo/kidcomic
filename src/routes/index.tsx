@@ -7,8 +7,9 @@ import {
   extendComic,
   regeneratePanelImage,
   restyleComic,
-} from "@/server/comic.functions";
-import { saveComic } from "@/server/library.functions";
+  type ComicResult,
+} from "@/lib/ai-api";
+import { saveComic } from "@/lib/library-api";
 import { useAuth } from "@/lib/auth-context";
 import { downloadStorybookPDF, downloadColoringBookPDF } from "@/lib/comic-export";
 import { toast } from "sonner";
@@ -16,24 +17,9 @@ import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/")({
   component: Home,
-  head: () => ({
-    meta: [
-      { title: "Bible Buddies — AI Comic Stories for Kids" },
-      {
-        name: "description",
-        content:
-          "Pick a Bible story and an art style — we'll draw a brand-new comic just for you, powered by AI.",
-      },
-      { property: "og:title", content: "Bible Buddies — AI Comic Stories for Kids" },
-      {
-        property: "og:description",
-        content: "Kid-friendly AI Bible comics. Pick a story, pick a style, watch it come to life!",
-      },
-    ],
-  }),
 });
 
-type Comic = Awaited<ReturnType<typeof generateComic>>;
+type Comic = ComicResult;
 type Panel = Comic["panels"][number];
 
 const FUN_IDEAS = [
@@ -85,14 +71,12 @@ function Home() {
     mutationFn: async () => {
       if (!canGenerate) throw new Error("Pick a story or write your own idea!");
       return generateComic({
-        data: {
-          storyTitle: mode === "pick" && story ? story.title : "Custom Adventure",
-          styleHint: style.promptHint,
-          customIdea: mode === "write" ? customIdea.trim() : undefined,
-          language: language.code,
-          twist: twist.trim() || undefined,
-          hero: hero.trim() || undefined,
-        },
+        storyTitle: mode === "pick" && story ? story.title : "Custom Adventure",
+        styleHint: style.promptHint,
+        customIdea: mode === "write" ? customIdea.trim() : undefined,
+        language: language.code,
+        twist: twist.trim() || undefined,
+        hero: hero.trim() || undefined,
       });
     },
     onSuccess: (data) => {
@@ -603,7 +587,6 @@ function ComicView({
   const ttsSupported =
     typeof window !== "undefined" && "speechSynthesis" in window;
 
-  // Warm up voices list (some browsers load async)
   useEffect(() => {
     if (!ttsSupported) return;
     window.speechSynthesis.getVoices();
@@ -672,17 +655,15 @@ function ComicView({
   const extendMutation = useMutation({
     mutationFn: async () => {
       return extendComic({
-        data: {
-          previousTitle: comic.title,
-          previousPanels: comic.panels.map((p) => ({
-            scene: p.scene,
-            caption: p.caption,
-            dialogue: p.dialogue,
-          })),
-          whatHappensNext: whatsNext.trim(),
-          styleHint,
-          language: language.code,
-        },
+        previousTitle: comic.title,
+        previousPanels: comic.panels.map((p) => ({
+          scene: p.scene,
+          caption: p.caption,
+          dialogue: p.dialogue,
+        })),
+        whatHappensNext: whatsNext.trim(),
+        styleHint,
+        language: language.code,
       });
     },
     onSuccess: (data) => {
@@ -722,14 +703,14 @@ function ComicView({
     );
     setEditingIdx(null);
 
-    // Re-render just that panel image so the new line fits the scene
     try {
       setRegeneratingIdx(i);
       const sceneWithLine = newDialogue
         ? `${comic.panels[i].scene}. The character ${newDialogue.speaker} is shown speaking.`
         : comic.panels[i].scene;
       const { imageUrl } = await regeneratePanelImage({
-        data: { scene: sceneWithLine, styleHint },
+        scene: sceneWithLine,
+        styleHint,
       });
       setComic((c) =>
         c
@@ -758,10 +739,8 @@ function ComicView({
     setRestyling(true);
     try {
       const { imageUrls } = await restyleComic({
-        data: {
-          scenes: comic.panels.map((p) => p.scene),
-          styleHint: newStyle.promptHint,
-        },
+        scenes: comic.panels.map((p) => p.scene),
+        styleHint: newStyle.promptHint,
       });
       setComic((c) =>
         c
@@ -889,14 +868,12 @@ function ComicView({
                 setSaveState("saving");
                 try {
                   const { shareId } = await saveComic({
-                    data: {
-                      title: comic.title,
-                      panels: comic.panels,
-                      styleId: currentStyle.id,
-                      styleName: currentStyle.name,
-                      language: language.code,
-                      isPublic: true,
-                    },
+                    title: comic.title,
+                    panels: comic.panels,
+                    styleId: currentStyle.id,
+                    styleName: currentStyle.name,
+                    language: language.code,
+                    isPublic: true,
                   });
                   setSavedShareId(shareId);
                   setSaveState("saved");

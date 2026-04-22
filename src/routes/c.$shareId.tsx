@@ -1,36 +1,18 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { getSharedComic } from "@/server/library.functions";
+import { getSharedComic } from "@/lib/library-api";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { downloadStorybookPDF, downloadColoringBookPDF } from "@/lib/comic-export";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/c/$shareId")({
   loader: async ({ params }) => {
     try {
-      const comic = await getSharedComic({ data: { shareId: params.shareId } });
+      const comic = await getSharedComic({ shareId: params.shareId });
       return { comic };
     } catch {
       throw notFound();
     }
-  },
-  head: ({ loaderData }) => {
-    const c = loaderData?.comic;
-    const title = c ? `${c.title} — Bible Buddies` : "Comic — Bible Buddies";
-    const desc = c ? `A kid-friendly AI Bible comic: ${c.title}` : "Shared comic";
-    const img =
-      (c?.panels as Array<{ imageUrl: string }> | undefined)?.[0]?.imageUrl ?? undefined;
-    return {
-      meta: [
-        { title },
-        { name: "description", content: desc },
-        { property: "og:title", content: title },
-        { property: "og:description", content: desc },
-        ...(img ? [{ property: "og:image", content: img }] : []),
-        ...(img ? [{ name: "twitter:image", content: img }] : []),
-        { name: "twitter:card", content: "summary_large_image" },
-      ],
-    };
   },
   component: SharedComic,
   notFoundComponent: () => (

@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
@@ -55,11 +54,14 @@ function AuthPage() {
   const handleGoogle = async () => {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + "/gallery",
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/gallery",
+        },
       });
-      if (result.error) throw result.error;
-      if (!result.redirected) navigate({ to: "/gallery" });
+      if (error) throw error;
+      // OAuth redirect happens automatically — no navigation needed
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign-in failed");
       setBusy(false);
@@ -71,7 +73,7 @@ function AuthPage() {
       <Toaster position="top-center" />
       <div className="mx-auto max-w-md">
         <Link to="/" className="font-display text-sm text-muted-foreground hover:underline">
-          ← Back home
+          &larr; Back home
         </Link>
         <div className="panel-card mt-6 bg-[var(--color-card)] p-6">
           <h1 className="font-display text-3xl">
